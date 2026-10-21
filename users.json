@@ -1,0 +1,20 @@
+[
+  {
+    "username": "Humberto Nevado",
+    "role": "operador",
+    "salt": "e1139415ffcfa51d24a78a0330a4f6a6",
+    "passwordHash": "409b1f4bcbe12559b85271a8d6b7c3f758bfb1cf56e18608e08e5129837929e4bafa2a6dc32eea532cd5ffbcac6cbcbca9b8704156a10b312decd195806f121c"
+  },
+  {
+    "username": "Alejandro Supervisor",
+    "role": "supervisor",
+    "salt": "c5b0daefd9151e045e6eb4f493f4a9ce",
+    "passwordHash": "325689"
+  },
+  {
+    "username": "Directiva Admin",
+    "role": "admin",
+    "salt": "794c7b266455e0db9aa69bd8fe867850",
+    "passwordHash": "1906e6802959e5fc368e82fe2a3b50e836957ebec68461e5a1c7b7c2a91566778b9c31c3ef805313fbbea3d6f63c7141f90b0600485a700b9a0829621ba8a636"
+  }
+]

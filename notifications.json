@@ -1,0 +1,110 @@
+[
+  {
+    "id": "ea82c46d-752c-430e-82eb-cf42bc69d4d1",
+    "recipient": "Alejandro Supervisor",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: Desactivo.",
+    "action": null,
+    "createdAt": "2026-11-09T20:38:13.095Z",
+    "readAt": "2026-11-09T20:43:17.313Z"
+  },
+  {
+    "id": "bd8160ae-7265-4d32-a990-ba0ce62d8e48",
+    "recipient": "Directiva Admin",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: Desactivo.",
+    "action": null,
+    "createdAt": "2026-11-09T20:38:13.095Z",
+    "readAt": "2026-11-09T22:43:51.708Z"
+  },
+  {
+    "id": "ac46999a-10b0-4e6c-aa56-b7fa2c80e2a8",
+    "recipient": "Alejandro Supervisor",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: En Receso.",
+    "action": null,
+    "createdAt": "2026-11-09T20:38:14.875Z",
+    "readAt": "2026-11-09T20:43:17.313Z"
+  },
+  {
+    "id": "70a8c312-6dbf-49b4-8114-839d3bec33ce",
+    "recipient": "Directiva Admin",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: En Receso.",
+    "action": null,
+    "createdAt": "2026-11-09T20:38:14.875Z",
+    "readAt": "2026-11-09T22:43:51.708Z"
+  },
+  {
+    "id": "258452d1-a3e5-443b-a2ce-6534e08d0377",
+    "recipient": "Alejandro Supervisor",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: Activo.",
+    "action": null,
+    "createdAt": "2026-11-09T20:38:16.006Z",
+    "readAt": "2026-11-09T20:43:17.313Z"
+  },
+  {
+    "id": "cb418547-8ce9-48f3-8239-38f49c78e66f",
+    "recipient": "Directiva Admin",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: Activo.",
+    "action": null,
+    "createdAt": "2026-11-09T20:38:16.006Z",
+    "readAt": "2026-11-09T22:43:51.708Z"
+  },
+  {
+    "id": "6f63da78-cef4-4deb-84c3-b7ce3db04d97",
+    "recipient": "Alejandro Supervisor",
+    "title": "Reporte del día",
+    "text": "Humberto Nevado guardó su reporte del 2026-11-09.",
+    "action": null,
+    "createdAt": "2026-11-09T20:39:25.083Z",
+    "readAt": "2026-11-09T20:43:17.313Z"
+  },
+  {
+    "id": "9047ef4b-6ca3-4b91-bfb6-3af8df37dd71",
+    "recipient": "Directiva Admin",
+    "title": "Reporte del día",
+    "text": "Humberto Nevado guardó su reporte del 2026-11-09.",
+    "action": null,
+    "createdAt": "2026-11-09T20:39:25.083Z",
+    "readAt": "2026-11-09T22:43:51.708Z"
+  },
+  {
+    "id": "6ad23f1a-cbb8-48cf-8d77-0b5916948501",
+    "recipient": "Alejandro Supervisor",
+    "title": "Incidencia del día",
+    "text": "Humberto Nevado registró un reclamo por tarifa para esties una prueba.",
+    "action": null,
+    "createdAt": "2026-11-09T20:41:24.057Z",
+    "readAt": "2026-11-09T20:43:17.313Z"
+  },
+  {
+    "id": "62babdc2-104a-44a0-9bc9-274944b76976",
+    "recipient": "Directiva Admin",
+    "title": "Incidencia del día",
+    "text": "Humberto Nevado registró un reclamo por tarifa para esties una prueba.",
+    "action": null,
+    "createdAt": "2026-11-09T20:41:24.057Z",
+    "readAt": "2026-11-09T22:43:51.708Z"
+  },
+  {
+    "id": "c7d6898d-fbe0-4588-96ba-9bbef2a694f0",
+    "recipient": "Humberto Nevado",
+    "title": "Chat general",
+    "text": "Directiva Admin: holaaa",
+    "action": null,
+    "createdAt": "2026-11-09T22:43:49.515Z",
+    "readAt": null
+  },
+  {
+    "id": "7bbce050-150d-4a0c-a6ff-460c041a72d4",
+    "recipient": "Alejandro Supervisor",
+    "title": "Chat general",
+    "text": "Directiva Admin: holaaa",
+    "action": null,
+    "createdAt": "2026-11-09T22:43:49.515Z",
+    "readAt": null
+  }
+]

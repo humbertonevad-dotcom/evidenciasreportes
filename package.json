@@ -1,0 +1,19 @@
+{
+  "name": "evidencia-portal-gestion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Portal de Gestión y Operaciones Evidencia",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "fflate": "^0.8.3",
+    "multer": "^2.0.1",
+    "socket.io": "^4.8.1"
+  }
+}

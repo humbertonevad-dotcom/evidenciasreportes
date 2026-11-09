@@ -1,0 +1,8 @@
+/node_modules/
+/messages.json
+/messages.json.*.tmp
+/daily_reports.json
+/daily_reports.json.*.tmp
+/notifications.json
+/notifications.json.*.tmp
+/daily_reports_files/

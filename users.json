@@ -16,5 +16,11 @@
     "role": "admin",
     "salt": "794c7b266455e0db9aa69bd8fe867850",
     "passwordHash": "1906e6802959e5fc368e82fe2a3b50e836957ebec68461e5a1c7b7c2a91566778b9c31c3ef805313fbbea3d6f63c7141f90b0600485a700b9a0829621ba8a636"
+  },
+  {
+    "username": "Humberto",
+    "role": "operador",
+    "salt": "f95e445db03d3a6d429b1f2fc431be09",
+    "passwordHash": "7feb8257c7869c00b9f410670afa97830f2b4cb87e40b1661edfb1806d9ebecb8a2cfa4c4533ca5d0245847697232250a64aae2bd400241bbf5ccde99054a9b4"
   }
 ]

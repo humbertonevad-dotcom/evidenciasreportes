@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "id": "237e0758-ced8-4e01-98c4-27757f5c766d",
+    "type": "RECLAMO",
+    "date": "2026-11-09",
+    "operator": "Humberto",
+    "razonSocial": "eqwfiwrjfi",
+    "cc": "151155",
+    "municipio": "dkhfkjehfn",
+    "description": "sdvmdo",
+    "amount": 131243,
+    "contact": {
+      "name": "dojifwhufs",
+      "phone": "45154158"
+    },
+    "submittedAt": "2026-11-09T23:51:44.098Z"
+  }
+]

@@ -5,5 +5,12 @@
     "sender": "Directiva Admin",
     "text": "holaaa",
     "sentAt": "2026-11-09T22:43:49.512Z"
+  },
+  {
+    "id": "e9c8679d-ffd3-48ca-af77-a13695d37935",
+    "type": "general",
+    "sender": "Alejandro Supervisor",
+    "text": "holis",
+    "sentAt": "2026-11-09T23:49:07.901Z"
   }
 ]

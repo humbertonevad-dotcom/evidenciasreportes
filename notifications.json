@@ -96,7 +96,7 @@
     "text": "Directiva Admin: holaaa",
     "action": null,
     "createdAt": "2026-11-09T22:43:49.515Z",
-    "readAt": null
+    "readAt": "2026-11-09T23:46:16.098Z"
   },
   {
     "id": "7bbce050-150d-4a0c-a6ff-460c041a72d4",
@@ -105,6 +105,177 @@
     "text": "Directiva Admin: holaaa",
     "action": null,
     "createdAt": "2026-11-09T22:43:49.515Z",
+    "readAt": "2026-11-10T00:19:42.509Z"
+  },
+  {
+    "id": "83e816a5-a36f-48bb-8c02-7bcb8ce08045",
+    "recipient": "Alejandro Supervisor",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: En Receso.",
+    "action": null,
+    "createdAt": "2026-11-09T23:45:01.699Z",
+    "readAt": "2026-11-10T00:19:42.509Z"
+  },
+  {
+    "id": "9193e934-4d12-4c99-858e-fb3ef3912729",
+    "recipient": "Directiva Admin",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: En Receso.",
+    "action": null,
+    "createdAt": "2026-11-09T23:45:01.699Z",
+    "readAt": "2026-11-09T23:47:44.548Z"
+  },
+  {
+    "id": "813cc24b-8759-499e-9841-709f7d42e97d",
+    "recipient": "Alejandro Supervisor",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: Desactivo.",
+    "action": null,
+    "createdAt": "2026-11-09T23:45:03.628Z",
+    "readAt": "2026-11-10T00:19:42.509Z"
+  },
+  {
+    "id": "1ef46d5b-86e4-421a-9f9d-0bf282f12cc4",
+    "recipient": "Directiva Admin",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: Desactivo.",
+    "action": null,
+    "createdAt": "2026-11-09T23:45:03.628Z",
+    "readAt": "2026-11-09T23:47:44.548Z"
+  },
+  {
+    "id": "17de2fc2-36ad-46f1-b209-dd3ebda094fb",
+    "recipient": "Alejandro Supervisor",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: Activo.",
+    "action": null,
+    "createdAt": "2026-11-09T23:45:05.847Z",
+    "readAt": "2026-11-10T00:19:42.509Z"
+  },
+  {
+    "id": "bcfc2c84-816f-4145-b85c-9952816f1ba3",
+    "recipient": "Directiva Admin",
+    "title": "Estado de operador",
+    "text": "Humberto Nevado actualizó su estado: Activo.",
+    "action": null,
+    "createdAt": "2026-11-09T23:45:05.847Z",
+    "readAt": "2026-11-09T23:47:44.548Z"
+  },
+  {
+    "id": "d9027315-191b-493f-ae3a-15d41fe41c69",
+    "recipient": "Alejandro Supervisor",
+    "title": "Incidencia del día",
+    "text": "Humberto Nevado registró un reclamo por tarifa para 256xcijscisuch.",
+    "action": null,
+    "createdAt": "2026-11-09T23:46:05.779Z",
+    "readAt": "2026-11-10T00:19:42.509Z"
+  },
+  {
+    "id": "512865fc-ad8a-4eae-ba62-bd5f354aa62e",
+    "recipient": "Directiva Admin",
+    "title": "Incidencia del día",
+    "text": "Humberto Nevado registró un reclamo por tarifa para 256xcijscisuch.",
+    "action": null,
+    "createdAt": "2026-11-09T23:46:05.779Z",
+    "readAt": "2026-11-09T23:47:44.548Z"
+  },
+  {
+    "id": "f8578458-27fa-4dff-86f4-04a423249e6e",
+    "recipient": "Humberto Nevado",
+    "title": "Chat general",
+    "text": "Alejandro Supervisor: holis",
+    "action": null,
+    "createdAt": "2026-11-09T23:49:07.909Z",
+    "readAt": null
+  },
+  {
+    "id": "7845cc74-32cb-4eb7-8497-e08318b8a1b8",
+    "recipient": "Directiva Admin",
+    "title": "Chat general",
+    "text": "Alejandro Supervisor: holis",
+    "action": null,
+    "createdAt": "2026-11-09T23:49:07.909Z",
+    "readAt": null
+  },
+  {
+    "id": "e926cc7b-1db6-4091-a2f4-28e47bb12969",
+    "recipient": "Humberto",
+    "title": "Chat general",
+    "text": "Alejandro Supervisor: holis",
+    "action": null,
+    "createdAt": "2026-11-09T23:49:07.909Z",
+    "readAt": "2026-11-09T23:52:49.895Z"
+  },
+  {
+    "id": "99fa4159-76a6-420f-986e-e906a54a167d",
+    "recipient": "Alejandro Supervisor",
+    "title": "Incidencia del día",
+    "text": "Humberto registró un reclamo por tarifa para eqwfiwrjfi.",
+    "action": null,
+    "createdAt": "2026-11-09T23:51:44.101Z",
+    "readAt": "2026-11-10T00:19:42.509Z"
+  },
+  {
+    "id": "127aa592-c2d1-40f7-8d00-ecb51545dc00",
+    "recipient": "Directiva Admin",
+    "title": "Incidencia del día",
+    "text": "Humberto registró un reclamo por tarifa para eqwfiwrjfi.",
+    "action": null,
+    "createdAt": "2026-11-09T23:51:44.101Z",
+    "readAt": null
+  },
+  {
+    "id": "9eac55e7-33b2-45ce-a88c-6a3afdbe09ae",
+    "recipient": "Alejandro Supervisor",
+    "title": "Reporte del día",
+    "text": "Humberto guardó su reporte del 2026-11-09.",
+    "action": null,
+    "createdAt": "2026-11-09T23:52:28.091Z",
+    "readAt": "2026-11-10T00:19:42.509Z"
+  },
+  {
+    "id": "b9e66170-34ac-4791-aa65-bead4d01f3ca",
+    "recipient": "Directiva Admin",
+    "title": "Reporte del día",
+    "text": "Humberto guardó su reporte del 2026-11-09.",
+    "action": null,
+    "createdAt": "2026-11-09T23:52:28.091Z",
+    "readAt": null
+  },
+  {
+    "id": "568ab186-d793-420c-b223-dedcb1c15b9d",
+    "recipient": "Alejandro Supervisor",
+    "title": "Estado de operador",
+    "text": "Humberto actualizó su estado: Activo.",
+    "action": null,
+    "createdAt": "2026-11-09T23:59:10.913Z",
+    "readAt": "2026-11-10T00:19:42.509Z"
+  },
+  {
+    "id": "1b610711-d45c-4477-9280-dc57333f4443",
+    "recipient": "Directiva Admin",
+    "title": "Estado de operador",
+    "text": "Humberto actualizó su estado: Activo.",
+    "action": null,
+    "createdAt": "2026-11-09T23:59:10.913Z",
+    "readAt": null
+  },
+  {
+    "id": "a117eed2-dcb5-4715-a6fe-a9b783259943",
+    "recipient": "Alejandro Supervisor",
+    "title": "Estado de operador",
+    "text": "Humberto actualizó su estado: En Receso.",
+    "action": null,
+    "createdAt": "2026-11-09T23:59:13.192Z",
+    "readAt": "2026-11-10T00:19:42.509Z"
+  },
+  {
+    "id": "60635337-8bd2-450c-be1a-fbcfa18205f9",
+    "recipient": "Directiva Admin",
+    "title": "Estado de operador",
+    "text": "Humberto actualizó su estado: En Receso.",
+    "action": null,
+    "createdAt": "2026-11-09T23:59:13.192Z",
     "readAt": null
   }
 ]

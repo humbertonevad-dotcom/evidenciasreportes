@@ -66,6 +66,9 @@
         .dashboard-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); align-items: start; gap: 22px; }
         .dashboard-primary { min-width: 0; }
         .card-panel { margin-bottom: 20px; padding: 21px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: #fff; box-shadow: var(--shadow-sm); }
+        .operator-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+        .operator-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #fff; }
+        .operator-card-name { overflow-wrap: anywhere; font-size: 14px; font-weight: 700; }
         .card-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; color: var(--primary); font-size: 16px; font-weight: 700; }
         .muted { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
         .form-row { display: flex; gap: 10px; margin-top: 12px; }
@@ -232,6 +235,7 @@
             currentRole: "operador",
             userName: "",
             operatorStatus: "Activo",
+            operatorFilter: "",
             selectedFile: null,
             activeCategory: "cobranza",
             activeChat: { type: "general", target: "" },
@@ -464,8 +468,9 @@
         }
 
         function renderDailyReportRows() {
-            if (!appState.dailyReports.length) return '<tr><td colspan="4">Todavía no hay reportes diarios guardados.</td></tr>';
-            return appState.dailyReports.map(report => `
+            const reports = filterByOperator(appState.dailyReports);
+            if (!reports.length) return '<tr><td colspan="4">Todavía no hay reportes diarios para el operador seleccionado.</td></tr>';
+            return reports.map(report => `
                 <tr>
                     <td>${escapeHtml(report.date)}</td>
                     <td>${escapeHtml(report.operator)}</td>
@@ -475,6 +480,81 @@
                         : "No disponible"}
                         ${appState.currentRole === "admin" ? `<button class="send-btn" style="background:var(--danger);margin-left:6px" type="button" data-action="delete-daily-report" data-id="${escapeHtml(report.id)}">Eliminar</button>` : ""}
                     </td>
+                </tr>
+            `).join("");
+        }
+
+        function normalizeOperatorName(username) {
+            return String(username || "").normalize("NFKC").toLocaleLowerCase("es");
+        }
+
+        function filterByOperator(records) {
+            if (!appState.operatorFilter) return records;
+            const operatorKey = normalizeOperatorName(appState.operatorFilter);
+            return records.filter(record => normalizeOperatorName(record.operator) === operatorKey);
+        }
+
+        function renderOperatorFilter() {
+            const operators = [...new Set([
+                ...appState.reports,
+                ...appState.dailyReports,
+                ...appState.incidences
+            ].map(record => record.operator).filter(Boolean))]
+                .sort((first, second) => first.localeCompare(second, "es"));
+            return `
+                <div class="form-row" style="margin-bottom:15px">
+                    <label class="muted" style="flex:1">Filtrar por operador:
+                        <select class="form-control" id="operatorFilterSelect" style="display:block;width:100%;margin-top:5px">
+                            <option value="">Todos los operadores</option>
+                            ${operators.map(operator => `<option value="${escapeHtml(operator)}" ${normalizeOperatorName(appState.operatorFilter) === normalizeOperatorName(operator) ? "selected" : ""}>${escapeHtml(operator)}</option>`).join("")}
+                        </select>
+                    </label>
+                </div>
+            `;
+        }
+
+        function refreshOperatorFilterOptions() {
+            const selector = document.getElementById("operatorFilterSelect");
+            if (!selector) return;
+            const selectedOperator = appState.operatorFilter;
+            const operators = [...new Set([
+                ...appState.reports,
+                ...appState.dailyReports,
+                ...appState.incidences
+            ].map(record => record.operator).filter(Boolean))]
+                .sort((first, second) => first.localeCompare(second, "es"));
+            selector.innerHTML = `<option value="">Todos los operadores</option>${operators.map(operator =>
+                `<option value="${escapeHtml(operator)}">${escapeHtml(operator)}</option>`
+            ).join("")}`;
+            selector.value = selectedOperator;
+        }
+
+        function renderPaymentRows() {
+            const rows = filterByOperator(appState.dailyReports).flatMap(report => {
+                const payments = report.details?.payments || [];
+                if (payments.length) {
+                    return payments.map(payment => ({
+                        date: report.date,
+                        operator: report.operator,
+                        detail: `${payment.razonSocial}${payment.cc ? ` (CC ${payment.cc})` : ""}`,
+                        amount: payment.amount
+                    }));
+                }
+                const total = report.details?.callStats?.collectionTotal;
+                return total == null ? [] : [{
+                    date: report.date,
+                    operator: report.operator,
+                    detail: "Total de cobranza reportado",
+                    amount: total
+                }];
+            });
+            if (!rows.length) return '<tr><td colspan="4">No hay pagos para el operador seleccionado.</td></tr>';
+            return rows.map(payment => `
+                <tr>
+                    <td>${escapeHtml(payment.date)}</td>
+                    <td>${escapeHtml(payment.operator)}</td>
+                    <td>${escapeHtml(payment.detail)}</td>
+                    <td>${escapeHtml(Number(payment.amount).toFixed(2))}</td>
                 </tr>
             `).join("");
         }
@@ -496,23 +576,49 @@
             `).join("");
         }
 
-        function renderManagementIncidencesPanel(allowDelete = false) {
+        function renderManagementIncidenceRows(type, allowDelete = false) {
+            const incidences = filterByOperator(appState.incidences).filter(incidence => incidence.type === type);
+            if (!incidences.length) {
+                return `<tr><td colspan="${6 + Number(allowDelete)}">No hay registros para el operador seleccionado.</td></tr>`;
+            }
+            return incidences.map(incidence => `
+                <tr>
+                    <td>${escapeHtml(incidence.date)}</td>
+                    <td>${escapeHtml(incidence.operator)}</td>
+                    <td>${escapeHtml(incidence.razonSocial)}</td>
+                    <td>${escapeHtml(incidence.cc)}</td>
+                    ${type === "RECLAMO"
+                        ? `<td>${escapeHtml(incidence.municipio || "—")}</td>`
+                        : `<td>${incidence.amount == null ? "—" : escapeHtml(Number(incidence.amount).toFixed(2))}</td>`}
+                    <td>${escapeHtml([incidence.contact?.name, incidence.contact?.phone].filter(Boolean).join(" · ") || "—")}</td>
+                    ${allowDelete ? `<td><button class="send-btn" style="background:var(--danger)" type="button" data-action="delete-incidence" data-id="${escapeHtml(incidence.id)}">Eliminar</button></td>` : ""}
+                </tr>
+            `).join("");
+        }
+
+        function renderManagementIncidencesPanel(type, allowDelete = false) {
+            const isClaim = type === "RECLAMO";
+            const title = isClaim ? "⚠️ Reclamos por tarifa" : "🤝 Convenios de pago";
+            const extraHeader = isClaim ? "<th>Municipio</th>" : "<th>Monto</th>";
+            const bodyId = isClaim ? "managementClaimsTableBody" : "managementAgreementsTableBody";
             return `
                 <section class="card-panel">
-                    <h2 class="card-title">📌 Reclamos y convenios registrados</h2>
+                    <h2 class="card-title">${title}</h2>
                     <div class="data-table-wrap"><table class="data-table">
-                        <thead><tr><th>Fecha</th><th>Operador</th><th>Tipo</th><th>Razón social</th><th>CC</th><th>Municipio</th><th>Monto</th><th>Contacto</th>${allowDelete ? "<th>Acción</th>" : ""}</tr></thead>
-                        <tbody id="managementIncidencesTableBody">${renderIncidenceRows(true, allowDelete)}</tbody>
+                        <thead><tr><th>Fecha</th><th>Operador</th><th>Razón social</th><th>CC</th>${extraHeader}<th>Contacto</th>${allowDelete ? "<th>Acción</th>" : ""}</tr></thead>
+                        <tbody id="${bodyId}">${renderManagementIncidenceRows(type, allowDelete)}</tbody>
                     </table></div>
                 </section>`;
         }
 
         // # AQUI SE CONSTRUYE LA VISTA DEL SUPERVISOR PARA REVISION Y COMUNICADOS
         function renderSupervisorView() {
+            if (appState.activeCategory === "cobranza") return renderCallCenterView();
             if (appState.activeCategory === "historico") return renderReportHistoryView();
             return `
                 <div class="dashboard-grid">
                     <div class="dashboard-primary">
+                        ${renderOperatorFilter()}
                         <section class="card-panel">
                             <h2 class="card-title">🟢 Monitoreo de operadores</h2>
                             <div class="data-table-wrap"><table class="data-table">
@@ -521,7 +627,7 @@
                             </table></div>
                         </section>
                         <section class="card-panel">
-                            <h2 class="card-title">👔 Bandeja de aprobación de reportes</h2>
+                            <h2 class="card-title">📄 Reportes diarios de operadores</h2>
                             <p class="muted">Descarga los reportes diarios enviados por los operadores.</p>
                             <div class="form-row" style="margin-bottom:12px">
                                 <button class="secondary-btn" type="button" data-action="download-daily-reports">Descargar reportes diarios en Excel</button>
@@ -531,12 +637,23 @@
                                 <thead><tr><th>Fecha</th><th>Operador</th><th>Archivo</th><th>Acción</th></tr></thead>
                                 <tbody id="dailyReportsTableBody">${renderDailyReportRows()}</tbody>
                             </table></div>
+                        </section>
+                        <section class="card-panel">
+                            <h2 class="card-title">💳 Pagos expeditos y carga de cobranza</h2>
+                            <div class="data-table-wrap"><table class="data-table">
+                                <thead><tr><th>Fecha</th><th>Operador</th><th>Detalle / Lote</th><th>Monto total</th></tr></thead>
+                                <tbody id="managementPaymentsBody">${renderPaymentRows()}</tbody>
+                            </table></div>
+                        </section>
+                        <section class="card-panel">
+                            <h2 class="card-title">👔 Reportes cargados para revisión</h2>
                             <div class="data-table-wrap"><table class="data-table">
                                 <thead><tr><th>Operador</th><th>Fecha</th><th>Campaña</th><th>Archivo</th><th>Estado y acciones</th></tr></thead>
                                 <tbody id="supervisorReportsBody">${renderSupervisorReportRows()}</tbody>
                             </table></div>
                         </section>
-                        ${renderManagementIncidencesPanel(false)}
+                        ${renderManagementIncidencesPanel("RECLAMO")}
+                        ${renderManagementIncidencesPanel("CONVENIO")}
                         <section class="card-panel">
                             <h2 class="card-title">✉️ Comunicados de supervisión</h2>
                             <form data-form="supervisor-message">
@@ -555,8 +672,9 @@
         }
 
         function renderSupervisorReportRows() {
-            if (!appState.reports.length) return '<tr><td colspan="5">No hay reportes pendientes. Los reportes nuevos aparecerán aquí.</td></tr>';
-            return appState.reports.map(report => `
+            const reports = filterByOperator(appState.reports);
+            if (!reports.length) return '<tr><td colspan="5">No hay reportes para el operador seleccionado.</td></tr>';
+            return reports.map(report => `
                 <tr>
                     <td>${escapeHtml(report.operator)}</td><td>${escapeHtml(report.reportDate || new Date(report.uploadedAt).toLocaleDateString())}</td>
                     <td>${escapeHtml(report.campaign || "Plantillas Excel")}</td>
@@ -569,12 +687,38 @@
             `).join("");
         }
 
+        function renderCallCenterView() {
+            return `
+                <section class="card-panel">
+                    <h2 class="card-title">📞 Operadores conectados</h2>
+                    <div class="operator-card-grid" id="callCenterOperators">${renderOperatorCards()}</div>
+                </section>
+            `;
+        }
+
+        function renderOperatorCards() {
+            const operators = appState.onlineUsers.filter(user => user.role === "operador");
+            if (!operators.length) return '<p class="muted">No hay operadores conectados en este momento.</p>';
+            return operators.map(operator => {
+                const status = operator.status === "Desactivo" ? "Inactivo" : operator.status;
+                const statusClass = statusClasses[operator.status] || "badge-danger";
+                return `
+                    <article class="operator-card">
+                        <span class="operator-card-name">${escapeHtml(operator.username)}</span>
+                        <span class="badge-status ${statusClass}">${escapeHtml(status)}</span>
+                    </article>
+                `;
+            }).join("");
+        }
+
         // # AQUI SE CONSTRUYE LA VISTA ADMINISTRATIVA CON USUARIOS CONECTADOS EN TIEMPO REAL
         function renderAdminView() {
+            if (appState.activeCategory === "cobranza") return renderCallCenterView();
             if (appState.activeCategory === "historico") return renderReportHistoryView();
             return `
                 <div class="dashboard-grid">
                     <div class="dashboard-primary">
+                        ${renderOperatorFilter()}
                         <section class="card-panel">
                             <h2 class="card-title">👑 Centro de monitoreo en tiempo real</h2>
                             <p class="muted" style="margin-bottom:12px">Usuarios autenticados conectados a este servidor.</p>
@@ -584,8 +728,8 @@
                             </table></div>
                         </section>
                         <section class="card-panel">
-                            <h2 class="card-title">📈 Resumen de reportes</h2>
-                            <p id="reportCount">Reportes guardados en el servidor: ${appState.reports.length}</p>
+                            <h2 class="card-title">📄 Reportes diarios de operadores</h2>
+                            <p id="reportCount">Reportes cargados para revisión: ${filterByOperator(appState.reports).length}</p>
                             <div class="form-row">
                                 <button class="secondary-btn" type="button" data-action="download-daily-reports">Descargar reportes diarios en Excel</button>
                                 <button class="secondary-btn" type="button" data-action="download-daily-reports-txt">Descargar todos los TXT</button>
@@ -595,7 +739,15 @@
                                 <tbody id="dailyReportsTableBody">${renderDailyReportRows()}</tbody>
                             </table></div>
                         </section>
-                        ${renderManagementIncidencesPanel(true)}
+                        <section class="card-panel">
+                            <h2 class="card-title">💳 Pagos expeditos y carga de cobranza</h2>
+                            <div class="data-table-wrap"><table class="data-table">
+                                <thead><tr><th>Fecha</th><th>Operador</th><th>Detalle / Lote</th><th>Monto total</th></tr></thead>
+                                <tbody id="managementPaymentsBody">${renderPaymentRows()}</tbody>
+                            </table></div>
+                        </section>
+                        ${renderManagementIncidencesPanel("RECLAMO", true)}
+                        ${renderManagementIncidencesPanel("CONVENIO", true)}
                         <section class="card-panel">
                             <h2 class="card-title">👥 Crear cuenta de usuario</h2>
                             <form data-form="user-create">
@@ -640,8 +792,9 @@
         }
 
         function renderReportHistoryRows() {
-            if (!appState.reports.length) return '<tr><td colspan="6">No hay reportes registrados.</td></tr>';
-            return appState.reports.map(report => `
+            const reports = filterByOperator(appState.reports);
+            if (!reports.length) return '<tr><td colspan="6">No hay reportes para el operador seleccionado.</td></tr>';
+            return reports.map(report => `
                 <tr>
                     <td>${escapeHtml(report.reportDate || new Date(report.uploadedAt).toLocaleDateString())}</td>
                     <td>${escapeHtml(report.operator)}</td>
@@ -662,6 +815,7 @@
                     <div class="dashboard-primary">
                         <section class="card-panel">
                             <h2 class="card-title">📅 Histórico de fechas y reportes</h2>
+                            ${renderOperatorFilter()}
                             <div class="data-table-wrap"><table class="data-table">
                                 <thead><tr><th>Fecha</th><th>Operador</th><th>Archivo</th><th>Estado</th><th>Revisado por</th><th>Acciones</th></tr></thead>
                                 <tbody id="managementHistoryBody">${renderReportHistoryRows()}</tbody>
@@ -742,6 +896,8 @@
             );
             const table = document.getElementById("adminOperatorsTable");
             if (table) table.innerHTML = renderOnlineUsers();
+            const operatorCards = document.getElementById("callCenterOperators");
+            if (operatorCards) operatorCards.innerHTML = renderOperatorCards();
             const selector = document.getElementById("msgDestinatario");
             if (selector) {
                 const selected = selector.value;
@@ -1026,13 +1182,17 @@
             if (supervisorTable) supervisorTable.innerHTML = renderSupervisorReportRows();
             const historyTable = document.getElementById("managementHistoryBody");
             if (historyTable) historyTable.innerHTML = renderReportHistoryRows();
+            refreshOperatorFilterOptions();
             const count = document.getElementById("reportCount");
-            if (count) count.textContent = `Reportes guardados en el servidor: ${appState.reports.length}`;
+            if (count) count.textContent = `Reportes cargados para revisión: ${filterByOperator(appState.reports).length}`;
         }
 
         function refreshDailyReportViews() {
             const table = document.getElementById("dailyReportsTableBody");
             if (table) table.innerHTML = renderDailyReportRows();
+            const paymentsTable = document.getElementById("managementPaymentsBody");
+            if (paymentsTable) paymentsTable.innerHTML = renderPaymentRows();
+            refreshOperatorFilterOptions();
         }
 
         function refreshIncidenceViews() {
@@ -1040,6 +1200,11 @@
             if (operatorTable) operatorTable.innerHTML = renderIncidenceRows();
             const managementTable = document.getElementById("managementIncidencesTableBody");
             if (managementTable) managementTable.innerHTML = renderIncidenceRows(true);
+            const claimsTable = document.getElementById("managementClaimsTableBody");
+            if (claimsTable) claimsTable.innerHTML = renderManagementIncidenceRows("RECLAMO", appState.currentRole === "admin");
+            const agreementsTable = document.getElementById("managementAgreementsTableBody");
+            if (agreementsTable) agreementsTable.innerHTML = renderManagementIncidenceRows("CONVENIO", appState.currentRole === "admin");
+            refreshOperatorFilterOptions();
         }
 
         // # AQUI SE ENVIA EL ARCHIVO SELECCIONADO AL ENDPOINT DEL SERVIDOR
@@ -1617,6 +1782,11 @@
             document.addEventListener("change", event => {
                 if (event.target instanceof HTMLInputElement && event.target.id === "reportFileInput") {
                     handleReportFile(event.target.files?.[0]);
+                } else if (event.target instanceof HTMLSelectElement && event.target.id === "operatorFilterSelect") {
+                    appState.operatorFilter = event.target.value;
+                    refreshReportViews();
+                    refreshDailyReportViews();
+                    refreshIncidenceViews();
                 }
             });
             document.addEventListener("dragover", event => {
@@ -1671,6 +1841,14 @@
                         badge.textContent = data.status;
                         badge.className = `badge-status ${statusClasses[data.status] || "badge-danger"}`;
                     }
+                }
+                if (typeof data?.username === "string" && Object.prototype.hasOwnProperty.call(statusClasses, data.status)) {
+                    const operator = appState.onlineUsers.find(user =>
+                        normalizeOperatorName(user.username) === normalizeOperatorName(data.username)
+                    );
+                    if (operator) operator.status = data.status;
+                    const operatorCards = document.getElementById("callCenterOperators");
+                    if (operatorCards) operatorCards.innerHTML = renderOperatorCards();
                 }
             });
             socket.on("chat:message", appendChatMessage);

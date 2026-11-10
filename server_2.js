@@ -803,7 +803,12 @@ app.get("/api/incidencias", requireAuth, (request, response) => {
         ? incidences.filter(incidence =>
             normalizeUsername(incidence.operator) === normalizeUsername(request.auth.user.username))
         : incidences;
-    response.json({ success: true, incidencias: visibleIncidences });
+    response.json({
+        success: true,
+        incidencias: visibleIncidences,
+        reclamos: visibleIncidences.filter(incidence => incidence.type === "RECLAMO"),
+        convenios: visibleIncidences.filter(incidence => incidence.type === "CONVENIO")
+    });
 });
 
 app.get("/api/daily-reports", requireAuth, (request, response) => {

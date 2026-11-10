@@ -136,8 +136,8 @@ function loadUsers() {
 
     const defaults = [
         { username: "Humberto Nevado", role: "operador" },
-        { username: "Alejandro Supervisor", role: "supervisor" },
-        { username: "Directiva Admin", role: "admin" }
+        { username: "Supervisor", role: "supervisor" },
+        { username: "Admin", role: "admin" }
     ].map(user => {
         const salt = randomBytes(16).toString("hex");
         return { ...user, salt, passwordHash: hashPassword("123", salt) };
@@ -1413,6 +1413,6 @@ server.listen(PORT, HOST, () => {
         console.log("El servidor acepta conexiones de la red local; usa la IPv4 de esta PC desde otros dispositivos.");
     }
     if (process.env.NODE_ENV !== "production") {
-        console.log("Cuentas de prueba iniciales: Humberto Nevado / 123, Alejandro Supervisor / 123 y Directiva Admin / 123");
+        console.log("Cuentas de prueba iniciales: Humberto / 123, Supervisor / 123 y Admin / 123");
     }
 });

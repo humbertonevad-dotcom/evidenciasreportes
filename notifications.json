@@ -195,7 +195,7 @@
     "text": "Alejandro Supervisor: holis",
     "action": null,
     "createdAt": "2026-11-09T23:49:07.909Z",
-    "readAt": null
+    "readAt": "2026-11-10T00:31:35.841Z"
   },
   {
     "id": "e926cc7b-1db6-4091-a2f4-28e47bb12969",
@@ -222,7 +222,7 @@
     "text": "Humberto registró un reclamo por tarifa para eqwfiwrjfi.",
     "action": null,
     "createdAt": "2026-11-09T23:51:44.101Z",
-    "readAt": null
+    "readAt": "2026-11-10T00:31:35.841Z"
   },
   {
     "id": "9eac55e7-33b2-45ce-a88c-6a3afdbe09ae",
@@ -240,7 +240,7 @@
     "text": "Humberto guardó su reporte del 2026-11-09.",
     "action": null,
     "createdAt": "2026-11-09T23:52:28.091Z",
-    "readAt": null
+    "readAt": "2026-11-10T00:31:35.841Z"
   },
   {
     "id": "568ab186-d793-420c-b223-dedcb1c15b9d",
@@ -258,7 +258,7 @@
     "text": "Humberto actualizó su estado: Activo.",
     "action": null,
     "createdAt": "2026-11-09T23:59:10.913Z",
-    "readAt": null
+    "readAt": "2026-11-10T00:31:35.841Z"
   },
   {
     "id": "a117eed2-dcb5-4715-a6fe-a9b783259943",
@@ -276,6 +276,6 @@
     "text": "Humberto actualizó su estado: En Receso.",
     "action": null,
     "createdAt": "2026-11-09T23:59:13.192Z",
-    "readAt": null
+    "readAt": "2026-11-10T00:31:35.841Z"
   }
 ]

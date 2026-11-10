@@ -9,13 +9,13 @@ npm install
 npm start
 ```
 
-El punto de entrada compatible es `server.js`; este carga `server_2.js`, que configura Express, autenticación, API y Socket.IO.
+El punto de entrada compatible es `server.js`; este carga `server_2.js`, que configura Express, autenticación, API y Socket.IO. Por defecto, el servidor escucha en todas las interfaces de red (`HOST=0.0.0.0`) para permitir acceso desde otros dispositivos de la misma red.
 
 ## Iniciar desde Visual Studio Code
 
-En Ejecutar y depurar, selecciona **Iniciar servidor Evidencia** y presiona `F5`. VS Code espera el mensaje de servidor listo y abre `http://localhost:3000` en el navegador predeterminado.
+En Ejecutar y depurar, selecciona **Iniciar servidor Evidencia** y presiona `F5`. VS Code espera el mensaje de servidor listo y abre `http://localhost:3000` en el navegador predeterminado. También puedes iniciar el servidor con `npm start`.
 
-Esta configuración escucha en todas las interfaces de red (`HOST=0.0.0.0`) para permitir acceso desde otros dispositivos de la misma red. En el teléfono u otra PC, abre `http://<IPv4-de-esta-PC>:3000`; puedes consultar la IPv4 con `ipconfig`. El firewall de Windows debe permitir la conexión en la red local.
+En el teléfono u otra PC de la misma red, abre `http://<IPv4-de-esta-PC>:3000`; puedes consultar la IPv4 con `ipconfig`. El firewall de Windows debe permitir la conexión en la red local. Las cookies de sesión usan `SameSite=Lax` para mantener la autenticación en este acceso desde otro dispositivo.
 
 No expongas este servidor a Internet ni a redes no confiables. Antes de habilitar acceso de red, cambia las contraseñas de demostración y usa el portal únicamente en una red privada confiable.
 

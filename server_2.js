@@ -23,7 +23,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 const scryptAsync = promisify(scrypt);
 const PORT = Number(process.env.PORT) || 3000;
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || "0.0.0.0";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_DAILY_REPORT_LENGTH = 12000;
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
@@ -481,7 +481,7 @@ function cookieOptions(maxAge) {
         `${cookieName}=`,
         "Path=/",
         "HttpOnly",
-        "SameSite=Strict",
+        "SameSite=Lax",
         `Max-Age=${maxAge}`,
         ...(process.env.NODE_ENV === "production" ? ["Secure"] : [])
     ];

@@ -1,0 +1,15 @@
+/node_modules/
+/users.json
+/users.json.*.tmp
+/reports.json
+/reports.json.*.tmp
+/incidencias.json
+/incidencias.json.*.tmp
+/uploads/
+/messages.json
+/messages.json.*.tmp
+/daily_reports.json
+/daily_reports.json.*.tmp
+/notifications.json
+/notifications.json.*.tmp
+/daily_reports_files/

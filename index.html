@@ -66,6 +66,9 @@
         .dashboard-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); align-items: start; gap: 22px; }
         .dashboard-primary { min-width: 0; }
         .card-panel { margin-bottom: 20px; padding: 21px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: #fff; box-shadow: var(--shadow-sm); }
+        .operator-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+        .operator-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #fff; }
+        .operator-card-name { overflow-wrap: anywhere; font-size: 14px; font-weight: 700; }
         .card-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px; color: var(--primary); font-size: 16px; font-weight: 700; }
         .muted { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
         .form-row { display: flex; gap: 10px; margin-top: 12px; }
@@ -116,6 +119,7 @@
         .notifications-dropdown.is-open { display: flex; }
         .notif-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--border-color); background: #F8FAFC; font-size: 12px; font-weight: 700; }
         .notif-item { display: flex; flex-direction: column; gap: 4px; padding: 11px 14px; border-bottom: 1px solid var(--border-color); font-size: 11px; }
+        .notif-item.notification-action { width: 100%; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
         .notif-item.unread { background: #EFF6FF; }
         .notif-time { color: var(--text-muted); font-size: 10px; }
 
@@ -184,7 +188,7 @@
 
     <nav class="category-nav" id="categoryNav" aria-label="Categorías del portal" hidden>
         <button class="category-card active" type="button" data-category="cobranza"><span class="category-icon">📞</span><span>Call Center &amp; Cobranza</span></button>
-        <button class="category-card" type="button" data-category="plantillas"><span class="category-icon">📁</span><span>Plantillas Excel</span></button>
+        <button class="category-card" type="button" data-category="plantillas"><span class="category-icon">📝</span><span>Reportes del día</span></button>
         <button class="category-card" type="button" data-category="historico"><span class="category-icon">📅</span><span>Histórico de Fechas</span></button>
     </nav>
 
@@ -222,21 +226,41 @@
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
     <!-- # PARTE 4 Y 5: LOGICA DE ROLES, API, WEBSOCKETS, CHAT, SUBIDAS Y EVENTOS -->
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="./api-config.js"></script>
+    <script>
+        window.EVIDENCIA_API_URL = typeof window.EVIDENCIA_API_URL === "string"
+            ? window.EVIDENCIA_API_URL.trim().replace(/\/+$/, "")
+            : "";
+        window.EVIDENCIA_SOCKET_IO_READY = new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = `${window.EVIDENCIA_API_URL}/socket.io/socket.io.js`;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error("No se pudo cargar el cliente de Socket.IO."));
+            document.head.appendChild(script);
+        });
+    </script>
     <script>
         "use strict";
+
+        const API_BASE_URL = window.EVIDENCIA_API_URL;
+        function apiFetch(url, options = {}) {
+            return fetch(`${API_BASE_URL}${url}`, { ...options, credentials: "include" });
+        }
 
         // # AQUI SE MANTIENE EL ESTADO DE LA INTERFAZ, NO EL DE AUTENTICACION DEL SERVIDOR
         const appState = {
             currentRole: "operador",
             userName: "",
             operatorStatus: "Activo",
+            operatorFilter: "",
             selectedFile: null,
             activeCategory: "cobranza",
             activeChat: { type: "general", target: "" },
             privateTarget: "",
             onlineUsers: [],
             reports: [],
+            dailyReports: [],
+            incidences: [],
             messages: { general: [] },
             notifications: []
         };
@@ -244,7 +268,7 @@
 
         const roleNames = { operador: "Operador", supervisor: "Supervisor de Área", admin: "Administrador Global" };
         const statusClasses = { Activo: "badge-success", "En Receso": "badge-warning", Desactivo: "badge-danger" };
-        const socket = typeof window.io === "function" ? window.io({ autoConnect: false }) : null;
+        let socket = null;
         let toastTimer = 0;
 
         // # AQUI SE CODIFICA TEXTO DINAMICO ANTES DE USARLO EN PLANTILLAS HTML
@@ -270,6 +294,42 @@
         function ensureChatStore(key) {
             if (!Array.isArray(appState.messages[key])) appState.messages[key] = [];
             return appState.messages[key];
+        }
+
+        function messageKey(message) {
+            return message.id || `${message.sender}|${message.sentAt || ""}|${message.text}`;
+        }
+
+        function loadChatHistory(conversation = appState.activeChat) {
+            if (!socket?.connected) return;
+            const isPrivate = conversation.type === "private";
+            const key = isPrivate ? `private:${conversation.target}` : "general";
+            const username = appState.userName;
+            socket.emit("chat:history:get", {
+                type: conversation.type,
+                target: isPrivate ? conversation.target : ""
+            }, response => {
+                if (appState.userName !== username) return;
+                if (!response?.success || !Array.isArray(response.messages)) {
+                    showToast(response?.message || "No se pudo cargar el historial del chat.");
+                    return;
+                }
+                const existingMessages = ensureChatStore(key);
+                const mergedMessages = new Map(existingMessages.map(message => [messageKey(message), message]));
+                response.messages.forEach(message => mergedMessages.set(messageKey(message), {
+                    id: message.id,
+                    sender: message.sender,
+                    text: message.text,
+                    sentAt: message.sentAt,
+                    mine: message.sender === appState.userName
+                }));
+                appState.messages[key] = [...mergedMessages.values()]
+                    .sort((first, second) => Date.parse(first.sentAt || "") - Date.parse(second.sentAt || ""));
+                const currentKey = appState.activeChat.type === "private"
+                    ? `private:${appState.activeChat.target}`
+                    : "general";
+                if (key === currentKey && appState.userName) setRole(null, appState.currentRole);
+            });
         }
 
         // # AQUI SE DIBUJA EL CHAT GENERAL O PRIVADO SEGUN EL DESTINATARIO ACTIVO
@@ -313,23 +373,79 @@
                         <button class="send-btn" style="background:var(--danger)" type="button" data-action="operator-status" data-status="Desactivo">🔴 Desactivo</button>
                     </div>
                 </section>`;
-            const uploadPanel = `
+            const dailyReportPanel = `
                 <section class="card-panel">
-                    <h2 class="card-title">📥 Plantillas Excel</h2>
-                    <p class="muted">Carga aquí un reporte CSV o Excel para enviarlo a revisión.</p>
-                    <input id="reportFileInput" type="file" accept=".csv,.xls,.xlsx" hidden>
-                    <button class="dropzone" type="button" data-action="choose-file">
-                        <span class="dropzone-icon" aria-hidden="true">📁</span><b>Arrastra un archivo Excel o CSV aquí</b>
-                        <span class="muted" style="display:block;margin-top:5px">o haz clic para buscarlo en tu equipo</span>
-                        <span class="selected-file" id="selectedFileName">${appState.selectedFile ? escapeHtml(appState.selectedFile.name) : "Sin archivo seleccionado"}</span>
-                    </button>
+                    <h2 class="card-title">📝 Reporte del día</h2>
+                    <p class="muted">Completa las métricas y los pagos expeditos. Puedes agregar zonas y pagos; también puedes conservar el texto libre del reporte.</p>
                     <div class="form-row">
-                        <input class="form-control" id="reportDate" type="date" aria-label="Fecha del reporte">
-                        <select class="form-control grow" id="reportCampaign" aria-label="Campaña">
-                            <option value="">Seleccionar campaña...</option><option>Cobranza Cartera Vencida - Lote A</option>
-                        </select>
-                        <button class="send-btn" type="button" data-action="upload-report">Subir reporte</button>
+                        <label class="muted" style="flex:1">Llamadas realizadas<input class="form-control" id="dailyCallsMade" type="number" min="0" step="1" style="display:block;width:100%;margin-top:5px"></label>
+                        <label class="muted" style="flex:1">Llamadas no efectivas<input class="form-control" id="dailyCallsNotEffective" type="number" min="0" step="1" style="display:block;width:100%;margin-top:5px"></label>
+                        <label class="muted" style="flex:1">Solventes no cargadas<input class="form-control" id="dailySolventesNotLoaded" type="number" min="0" step="1" style="display:block;width:100%;margin-top:5px"></label>
                     </div>
+                    <h3 style="margin-top:16px">Llamadas efectivas por zona</h3>
+                    <div id="dailyReportZones">
+                        <div class="form-row report-detail-row zone-row">
+                            <input class="form-control grow" type="text" maxlength="80" data-zone-name placeholder="Zona">
+                            <input class="form-control" type="number" min="0" step="1" data-zone-count placeholder="Llamadas" aria-label="Llamadas efectivas">
+                            <button class="secondary-btn" type="button" data-action="remove-report-row" aria-label="Quitar zona">Quitar</button>
+                        </div>
+                    </div>
+                    <button class="secondary-btn" style="margin-top:8px" type="button" data-action="add-report-zone">+ Agregar zona</button>
+                    <h3 style="margin-top:16px">Pagos expeditos</h3>
+                    <div id="dailyReportPayments">
+                        <div class="form-row report-detail-row payment-row">
+                            <input class="form-control grow" type="text" maxlength="160" data-payment-business placeholder="Razón social">
+                            <input class="form-control" style="width:110px" type="text" maxlength="50" data-payment-cc placeholder="CC">
+                            <input class="form-control" style="width:140px" type="number" min="0" step="0.01" data-payment-amount placeholder="Monto" aria-label="Monto del pago">
+                            <button class="secondary-btn" type="button" data-action="remove-report-row" aria-label="Quitar pago">Quitar</button>
+                        </div>
+                    </div>
+                    <button class="secondary-btn" style="margin-top:8px" type="button" data-action="add-report-payment">+ Agregar pago</button>
+                    <div class="form-row">
+                        <label class="muted" style="flex:1">Total de cobranza<input class="form-control" id="dailyCollectionTotal" type="number" min="0" step="0.01" style="display:block;width:100%;margin-top:5px"></label>
+                    </div>
+                    <label class="muted" for="dailyReportText" style="display:block;margin-top:14px">Texto libre / observaciones (opcional)</label>
+                    <textarea class="form-control" id="dailyReportText" maxlength="12000" style="width:100%;min-height:120px;resize:vertical;margin-top:5px" placeholder="Buenas tardes&#10;Observaciones adicionales..."></textarea>
+                    <div class="form-row" style="margin-top:10px">
+                        <button class="send-btn" type="button" data-action="save-daily-report">📤 Reporte del día</button>
+                        <button class="secondary-btn" type="button" data-action="download-daily-reports">Descargar Excel</button>
+                        <button class="secondary-btn" type="button" data-action="download-daily-reports-txt">Descargar todos los TXT</button>
+                    </div>
+                    <h3 style="margin-top:18px">Reportes guardados</h3>
+                    <div class="data-table-wrap"><table class="data-table">
+                        <thead><tr><th>Fecha</th><th>Operador</th><th>Archivo de texto</th><th>Acción</th></tr></thead>
+                        <tbody id="dailyReportsTableBody">${renderDailyReportRows()}</tbody>
+                    </table></div>
+                </section>`;
+            const incidencePanel = `
+                <section class="card-panel">
+                    <h2 class="card-title">📌 Registrar reclamo o convenio</h2>
+                    <p class="muted">La incidencia quedará asociada a tu usuario y fecha, y aparecerá en el consolidado Excel.</p>
+                    <form data-form="incidence">
+                        <div class="form-row">
+                            <select class="form-control grow" id="incidenceType" required>
+                                <option value="RECLAMO">Reclamo por tarifa</option>
+                                <option value="CONVENIO">Convenio de pago</option>
+                            </select>
+                            <input class="form-control grow" id="incidenceBusiness" maxlength="160" placeholder="Razón social" required>
+                            <input class="form-control" style="width:150px" id="incidenceCc" maxlength="50" placeholder="CC" required>
+                        </div>
+                        <div class="form-row">
+                            <input class="form-control grow" id="incidenceMunicipality" maxlength="120" placeholder="Municipio">
+                            <input class="form-control grow" id="incidenceAmount" type="number" min="0" step="0.01" placeholder="Monto (opcional)">
+                        </div>
+                        <div class="form-row">
+                            <input class="form-control grow" id="incidenceContactName" maxlength="120" placeholder="Nombre del contacto">
+                            <input class="form-control grow" id="incidenceContactPhone" maxlength="40" type="tel" placeholder="Teléfono de contacto">
+                        </div>
+                        <textarea class="form-control" id="incidenceDescription" maxlength="1000" style="width:100%;min-height:76px;margin-top:10px;resize:vertical" placeholder="Motivo u observaciones"></textarea>
+                        <button class="send-btn" style="margin-top:10px" type="submit">Guardar incidencia</button>
+                    </form>
+                    <h3 style="margin-top:18px">Incidencias registradas</h3>
+                    <div class="data-table-wrap"><table class="data-table">
+                        <thead><tr><th>Fecha</th><th>Tipo</th><th>Razón social</th><th>CC</th><th>Municipio</th><th>Monto</th><th>Contacto</th></tr></thead>
+                        <tbody id="operatorIncidencesTableBody">${renderIncidenceRows()}</tbody>
+                    </table></div>
                 </section>`;
             const historyPanel = `
                 <section class="card-panel">
@@ -340,7 +456,7 @@
                     </table></div>
                 </section>`;
             const moduleContent = appState.activeCategory === "plantillas"
-                ? `${uploadPanel}${historyPanel}`
+                ? dailyReportPanel + incidencePanel
                 : appState.activeCategory === "historico" ? historyPanel : statusPanel;
             return `
                 <div class="dashboard-grid">
@@ -360,17 +476,166 @@
                     <td>${escapeHtml(report.operator)}</td>
                     <td>${escapeHtml(report.originalName)}</td>
                     <td><span class="badge-status ${report.status === "Aprobado" ? "badge-success" : report.status === "Rechazado" ? "badge-danger" : "badge-warning"}">${escapeHtml(report.status || "En revisión")}</span></td>
-                    <td><button class="secondary-btn" type="button" data-action="open-preview" data-date="${escapeHtml(report.reportDate || new Date(report.uploadedAt).toLocaleDateString())}" data-operator="${escapeHtml(report.operator)}">Ver</button></td>
+                    <td>
+                        <button class="secondary-btn" type="button" data-action="open-preview" data-date="${escapeHtml(report.reportDate || new Date(report.uploadedAt).toLocaleDateString())}" data-operator="${escapeHtml(report.operator)}">Ver</button>
+                        ${report.fileName ? `<button class="secondary-btn" type="button" data-action="download-uploaded-report" data-id="${escapeHtml(report.id)}">Descargar</button>` : ""}
+                    </td>
                 </tr>
             `).join("");
         }
 
+        function renderDailyReportRows() {
+            const reports = filterByOperator(appState.dailyReports);
+            if (!reports.length) return '<tr><td colspan="4">Todavía no hay reportes diarios para el operador seleccionado.</td></tr>';
+            return reports.map(report => `
+                <tr>
+                    <td>${escapeHtml(report.date)}</td>
+                    <td>${escapeHtml(report.operator)}</td>
+                    <td>${escapeHtml(report.fileName || "Archivo no disponible")}</td>
+                    <td>${report.fileName
+                        ? `<button class="secondary-btn" type="button" data-action="download-daily-report-file" data-id="${escapeHtml(report.id)}">Descargar TXT</button>`
+                        : "No disponible"}
+                        ${appState.currentRole === "admin" ? `<button class="send-btn" style="background:var(--danger);margin-left:6px" type="button" data-action="delete-daily-report" data-id="${escapeHtml(report.id)}">Eliminar</button>` : ""}
+                    </td>
+                </tr>
+            `).join("");
+        }
+
+        function normalizeOperatorName(username) {
+            return String(username || "").normalize("NFKC").toLocaleLowerCase("es");
+        }
+
+        function filterByOperator(records) {
+            if (!appState.operatorFilter) return records;
+            const operatorKey = normalizeOperatorName(appState.operatorFilter);
+            return records.filter(record => normalizeOperatorName(record.operator) === operatorKey);
+        }
+
+        function renderOperatorFilter() {
+            const operators = [...new Set([
+                ...appState.reports,
+                ...appState.dailyReports,
+                ...appState.incidences
+            ].map(record => record.operator).filter(Boolean))]
+                .sort((first, second) => first.localeCompare(second, "es"));
+            return `
+                <div class="form-row" style="margin-bottom:15px">
+                    <label class="muted" style="flex:1">Filtrar por operador:
+                        <select class="form-control" id="operatorFilterSelect" style="display:block;width:100%;margin-top:5px">
+                            <option value="">Todos los operadores</option>
+                            ${operators.map(operator => `<option value="${escapeHtml(operator)}" ${normalizeOperatorName(appState.operatorFilter) === normalizeOperatorName(operator) ? "selected" : ""}>${escapeHtml(operator)}</option>`).join("")}
+                        </select>
+                    </label>
+                </div>
+            `;
+        }
+
+        function refreshOperatorFilterOptions() {
+            const selector = document.getElementById("operatorFilterSelect");
+            if (!selector) return;
+            const selectedOperator = appState.operatorFilter;
+            const operators = [...new Set([
+                ...appState.reports,
+                ...appState.dailyReports,
+                ...appState.incidences
+            ].map(record => record.operator).filter(Boolean))]
+                .sort((first, second) => first.localeCompare(second, "es"));
+            selector.innerHTML = `<option value="">Todos los operadores</option>${operators.map(operator =>
+                `<option value="${escapeHtml(operator)}">${escapeHtml(operator)}</option>`
+            ).join("")}`;
+            selector.value = selectedOperator;
+        }
+
+        function renderPaymentRows() {
+            const rows = filterByOperator(appState.dailyReports).flatMap(report => {
+                const payments = report.details?.payments || [];
+                if (payments.length) {
+                    return payments.map(payment => ({
+                        date: report.date,
+                        operator: report.operator,
+                        detail: `${payment.razonSocial}${payment.cc ? ` (CC ${payment.cc})` : ""}`,
+                        amount: payment.amount
+                    }));
+                }
+                const total = report.details?.callStats?.collectionTotal;
+                return total == null ? [] : [{
+                    date: report.date,
+                    operator: report.operator,
+                    detail: "Total de cobranza reportado",
+                    amount: total
+                }];
+            });
+            if (!rows.length) return '<tr><td colspan="4">No hay pagos para el operador seleccionado.</td></tr>';
+            return rows.map(payment => `
+                <tr>
+                    <td>${escapeHtml(payment.date)}</td>
+                    <td>${escapeHtml(payment.operator)}</td>
+                    <td>${escapeHtml(payment.detail)}</td>
+                    <td>${escapeHtml(Number(payment.amount).toFixed(2))}</td>
+                </tr>
+            `).join("");
+        }
+
+        function renderIncidenceRows(includeOperator = false, allowDelete = false) {
+            if (!appState.incidences.length) return `<tr><td colspan="${7 + Number(includeOperator) + Number(allowDelete)}">Todavía no hay incidencias registradas.</td></tr>`;
+            return appState.incidences.map(incidence => `
+                <tr>
+                    <td>${escapeHtml(incidence.date)}</td>
+                    ${includeOperator ? `<td>${escapeHtml(incidence.operator)}</td>` : ""}
+                    <td>${incidence.type === "RECLAMO" ? "Reclamo por tarifa" : "Convenio de pago"}</td>
+                    <td>${escapeHtml(incidence.razonSocial)}</td>
+                    <td>${escapeHtml(incidence.cc)}</td>
+                    <td>${escapeHtml(incidence.municipio || "—")}</td>
+                    <td>${incidence.amount == null ? "—" : escapeHtml(Number(incidence.amount).toFixed(2))}</td>
+                    <td>${escapeHtml([incidence.contact?.name, incidence.contact?.phone].filter(Boolean).join(" · ") || "—")}</td>
+                    ${allowDelete ? `<td><button class="send-btn" style="background:var(--danger)" type="button" data-action="delete-incidence" data-id="${escapeHtml(incidence.id)}">Eliminar</button></td>` : ""}
+                </tr>
+            `).join("");
+        }
+
+        function renderManagementIncidenceRows(type, allowDelete = false) {
+            const incidences = filterByOperator(appState.incidences).filter(incidence => incidence.type === type);
+            if (!incidences.length) {
+                return `<tr><td colspan="${6 + Number(allowDelete)}">No hay registros para el operador seleccionado.</td></tr>`;
+            }
+            return incidences.map(incidence => `
+                <tr>
+                    <td>${escapeHtml(incidence.date)}</td>
+                    <td>${escapeHtml(incidence.operator)}</td>
+                    <td>${escapeHtml(incidence.razonSocial)}</td>
+                    <td>${escapeHtml(incidence.cc)}</td>
+                    ${type === "RECLAMO"
+                        ? `<td>${escapeHtml(incidence.municipio || "—")}</td>`
+                        : `<td>${incidence.amount == null ? "—" : escapeHtml(Number(incidence.amount).toFixed(2))}</td>`}
+                    <td>${escapeHtml([incidence.contact?.name, incidence.contact?.phone].filter(Boolean).join(" · ") || "—")}</td>
+                    ${allowDelete ? `<td><button class="send-btn" style="background:var(--danger)" type="button" data-action="delete-incidence" data-id="${escapeHtml(incidence.id)}">Eliminar</button></td>` : ""}
+                </tr>
+            `).join("");
+        }
+
+        function renderManagementIncidencesPanel(type, allowDelete = false) {
+            const isClaim = type === "RECLAMO";
+            const title = isClaim ? "⚠️ Reclamos por tarifa" : "🤝 Convenios de pago";
+            const extraHeader = isClaim ? "<th>Municipio</th>" : "<th>Monto</th>";
+            const bodyId = isClaim ? "managementClaimsTableBody" : "managementAgreementsTableBody";
+            return `
+                <section class="card-panel">
+                    <h2 class="card-title">${title}</h2>
+                    <div class="data-table-wrap"><table class="data-table">
+                        <thead><tr><th>Fecha</th><th>Operador</th><th>Razón social</th><th>CC</th>${extraHeader}<th>Contacto</th>${allowDelete ? "<th>Acción</th>" : ""}</tr></thead>
+                        <tbody id="${bodyId}">${renderManagementIncidenceRows(type, allowDelete)}</tbody>
+                    </table></div>
+                </section>`;
+        }
+
         // # AQUI SE CONSTRUYE LA VISTA DEL SUPERVISOR PARA REVISION Y COMUNICADOS
         function renderSupervisorView() {
+            if (appState.activeCategory === "cobranza") return renderCallCenterView();
             if (appState.activeCategory === "historico") return renderReportHistoryView();
             return `
                 <div class="dashboard-grid">
                     <div class="dashboard-primary">
+                        ${renderOperatorFilter()}
                         <section class="card-panel">
                             <h2 class="card-title">🟢 Monitoreo de operadores</h2>
                             <div class="data-table-wrap"><table class="data-table">
@@ -379,12 +644,33 @@
                             </table></div>
                         </section>
                         <section class="card-panel">
-                            <h2 class="card-title">👔 Bandeja de aprobación de reportes</h2>
+                            <h2 class="card-title">📄 Reportes diarios de operadores</h2>
+                            <p class="muted">Descarga los reportes diarios enviados por los operadores.</p>
+                            <div class="form-row" style="margin-bottom:12px">
+                                <button class="secondary-btn" type="button" data-action="download-daily-reports">Descargar reportes diarios en Excel</button>
+                                <button class="secondary-btn" type="button" data-action="download-daily-reports-txt">Descargar todos los TXT</button>
+                            </div>
+                            <div class="data-table-wrap"><table class="data-table">
+                                <thead><tr><th>Fecha</th><th>Operador</th><th>Archivo</th><th>Acción</th></tr></thead>
+                                <tbody id="dailyReportsTableBody">${renderDailyReportRows()}</tbody>
+                            </table></div>
+                        </section>
+                        <section class="card-panel">
+                            <h2 class="card-title">💳 Pagos expeditos y carga de cobranza</h2>
+                            <div class="data-table-wrap"><table class="data-table">
+                                <thead><tr><th>Fecha</th><th>Operador</th><th>Detalle / Lote</th><th>Monto total</th></tr></thead>
+                                <tbody id="managementPaymentsBody">${renderPaymentRows()}</tbody>
+                            </table></div>
+                        </section>
+                        <section class="card-panel">
+                            <h2 class="card-title">👔 Reportes cargados para revisión</h2>
                             <div class="data-table-wrap"><table class="data-table">
                                 <thead><tr><th>Operador</th><th>Fecha</th><th>Campaña</th><th>Archivo</th><th>Estado y acciones</th></tr></thead>
                                 <tbody id="supervisorReportsBody">${renderSupervisorReportRows()}</tbody>
                             </table></div>
                         </section>
+                        ${renderManagementIncidencesPanel("RECLAMO")}
+                        ${renderManagementIncidencesPanel("CONVENIO")}
                         <section class="card-panel">
                             <h2 class="card-title">✉️ Comunicados de supervisión</h2>
                             <form data-form="supervisor-message">
@@ -403,11 +689,13 @@
         }
 
         function renderSupervisorReportRows() {
-            if (!appState.reports.length) return '<tr><td colspan="5">No hay reportes pendientes. Los reportes nuevos aparecerán aquí.</td></tr>';
-            return appState.reports.map(report => `
+            const reports = filterByOperator(appState.reports);
+            if (!reports.length) return '<tr><td colspan="5">No hay reportes para el operador seleccionado.</td></tr>';
+            return reports.map(report => `
                 <tr>
                     <td>${escapeHtml(report.operator)}</td><td>${escapeHtml(report.reportDate || new Date(report.uploadedAt).toLocaleDateString())}</td>
-                    <td>${escapeHtml(report.campaign || "Plantillas Excel")}</td><td>${escapeHtml(report.originalName)}</td>
+                    <td>${escapeHtml(report.campaign || "Plantillas Excel")}</td>
+                    <td>${escapeHtml(report.originalName)}${report.fileName ? `<div><button class="secondary-btn" type="button" data-action="download-uploaded-report" data-id="${escapeHtml(report.id)}">Descargar archivo</button></div>` : ""}</td>
                     <td><span class="badge-status ${report.status === "Aprobado" ? "badge-success" : report.status === "Rechazado" ? "badge-danger" : "badge-warning"}" data-report-status>${escapeHtml(report.status || "En revisión")}</span><div class="form-row">
                         <button class="send-btn" style="background:var(--success)" type="button" data-action="review-report" data-id="${escapeHtml(report.id)}" data-status="Aprobado">Aprobar</button>
                         <button class="send-btn" style="background:var(--danger)" type="button" data-action="review-report" data-id="${escapeHtml(report.id)}" data-status="Rechazado">Rechazar</button>
@@ -416,12 +704,38 @@
             `).join("");
         }
 
+        function renderCallCenterView() {
+            return `
+                <section class="card-panel">
+                    <h2 class="card-title">📞 Operadores conectados</h2>
+                    <div class="operator-card-grid" id="callCenterOperators">${renderOperatorCards()}</div>
+                </section>
+            `;
+        }
+
+        function renderOperatorCards() {
+            const operators = appState.onlineUsers.filter(user => user.role === "operador");
+            if (!operators.length) return '<p class="muted">No hay operadores conectados en este momento.</p>';
+            return operators.map(operator => {
+                const status = operator.status === "Desactivo" ? "Inactivo" : operator.status;
+                const statusClass = statusClasses[operator.status] || "badge-danger";
+                return `
+                    <article class="operator-card">
+                        <span class="operator-card-name">${escapeHtml(operator.username)}</span>
+                        <span class="badge-status ${statusClass}">${escapeHtml(status)}</span>
+                    </article>
+                `;
+            }).join("");
+        }
+
         // # AQUI SE CONSTRUYE LA VISTA ADMINISTRATIVA CON USUARIOS CONECTADOS EN TIEMPO REAL
         function renderAdminView() {
+            if (appState.activeCategory === "cobranza") return renderCallCenterView();
             if (appState.activeCategory === "historico") return renderReportHistoryView();
             return `
                 <div class="dashboard-grid">
                     <div class="dashboard-primary">
+                        ${renderOperatorFilter()}
                         <section class="card-panel">
                             <h2 class="card-title">👑 Centro de monitoreo en tiempo real</h2>
                             <p class="muted" style="margin-bottom:12px">Usuarios autenticados conectados a este servidor.</p>
@@ -431,9 +745,26 @@
                             </table></div>
                         </section>
                         <section class="card-panel">
-                            <h2 class="card-title">📈 Resumen de reportes</h2>
-                            <p id="reportCount">Reportes guardados en el servidor: ${appState.reports.length}</p>
+                            <h2 class="card-title">📄 Reportes diarios de operadores</h2>
+                            <p id="reportCount">Reportes cargados para revisión: ${filterByOperator(appState.reports).length}</p>
+                            <div class="form-row">
+                                <button class="secondary-btn" type="button" data-action="download-daily-reports">Descargar reportes diarios en Excel</button>
+                                <button class="secondary-btn" type="button" data-action="download-daily-reports-txt">Descargar todos los TXT</button>
+                            </div>
+                            <div class="data-table-wrap"><table class="data-table">
+                                <thead><tr><th>Fecha</th><th>Operador</th><th>Archivo</th><th>Acción</th></tr></thead>
+                                <tbody id="dailyReportsTableBody">${renderDailyReportRows()}</tbody>
+                            </table></div>
                         </section>
+                        <section class="card-panel">
+                            <h2 class="card-title">💳 Pagos expeditos y carga de cobranza</h2>
+                            <div class="data-table-wrap"><table class="data-table">
+                                <thead><tr><th>Fecha</th><th>Operador</th><th>Detalle / Lote</th><th>Monto total</th></tr></thead>
+                                <tbody id="managementPaymentsBody">${renderPaymentRows()}</tbody>
+                            </table></div>
+                        </section>
+                        ${renderManagementIncidencesPanel("RECLAMO", true)}
+                        ${renderManagementIncidencesPanel("CONVENIO", true)}
                         <section class="card-panel">
                             <h2 class="card-title">👥 Crear cuenta de usuario</h2>
                             <form data-form="user-create">
@@ -478,14 +809,19 @@
         }
 
         function renderReportHistoryRows() {
-            if (!appState.reports.length) return '<tr><td colspan="5">No hay reportes registrados.</td></tr>';
-            return appState.reports.map(report => `
+            const reports = filterByOperator(appState.reports);
+            if (!reports.length) return '<tr><td colspan="6">No hay reportes para el operador seleccionado.</td></tr>';
+            return reports.map(report => `
                 <tr>
                     <td>${escapeHtml(report.reportDate || new Date(report.uploadedAt).toLocaleDateString())}</td>
                     <td>${escapeHtml(report.operator)}</td>
                     <td>${escapeHtml(report.originalName)}</td>
                     <td><span class="badge-status ${report.status === "Aprobado" ? "badge-success" : report.status === "Rechazado" ? "badge-danger" : "badge-warning"}">${escapeHtml(report.status || "En revisión")}</span></td>
                     <td>${escapeHtml(report.reviewer || "—")}</td>
+                    <td>
+                        ${report.fileName ? `<button class="secondary-btn" type="button" data-action="download-uploaded-report" data-id="${escapeHtml(report.id)}">Descargar</button>` : "Archivo no disponible"}
+                        ${appState.currentRole === "admin" ? `<button class="send-btn" style="background:var(--danger);margin-left:6px" type="button" data-action="delete-uploaded-report" data-id="${escapeHtml(report.id)}">Eliminar</button>` : ""}
+                    </td>
                 </tr>
             `).join("");
         }
@@ -496,8 +832,9 @@
                     <div class="dashboard-primary">
                         <section class="card-panel">
                             <h2 class="card-title">📅 Histórico de fechas y reportes</h2>
+                            ${renderOperatorFilter()}
                             <div class="data-table-wrap"><table class="data-table">
-                                <thead><tr><th>Fecha</th><th>Operador</th><th>Archivo</th><th>Estado</th><th>Revisado por</th></tr></thead>
+                                <thead><tr><th>Fecha</th><th>Operador</th><th>Archivo</th><th>Estado</th><th>Revisado por</th><th>Acciones</th></tr></thead>
                                 <tbody id="managementHistoryBody">${renderReportHistoryRows()}</tbody>
                             </table></div>
                         </section>
@@ -576,6 +913,8 @@
             );
             const table = document.getElementById("adminOperatorsTable");
             if (table) table.innerHTML = renderOnlineUsers();
+            const operatorCards = document.getElementById("callCenterOperators");
+            if (operatorCards) operatorCards.innerHTML = renderOperatorCards();
             const selector = document.getElementById("msgDestinatario");
             if (selector) {
                 const selected = selector.value;
@@ -587,7 +926,7 @@
         // # AQUI SE CARGA EL HISTORIAL DE REPORTES DISPONIBLE EN EL BACKEND
         async function loadReports() {
             try {
-                const response = await fetch("/api/reports");
+                const response = await apiFetch("/api/reports");
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 if (!Array.isArray(data.reports)) throw new Error("Respuesta de reportes inválida.");
@@ -599,6 +938,260 @@
             }
         }
 
+        async function loadDailyReports() {
+            try {
+                const response = await apiFetch("/api/daily-reports");
+                const result = await response.json();
+                if (!response.ok || !result.success || !Array.isArray(result.reports)) {
+                    throw new Error(result.message || `HTTP ${response.status}`);
+                }
+                appState.dailyReports = result.reports;
+                refreshDailyReportViews();
+            } catch (error) {
+                console.error("No se pudieron cargar los reportes diarios:", error);
+                showToast(error.message || "No se pudieron cargar los reportes diarios.");
+            }
+        }
+
+        async function loadIncidences() {
+            try {
+                const response = await apiFetch("/api/incidencias");
+                const result = await response.json();
+                if (!response.ok || !result.success || !Array.isArray(result.incidencias)) {
+                    throw new Error(result.message || `HTTP ${response.status}`);
+                }
+                appState.incidences = result.incidencias;
+                refreshIncidenceViews();
+            } catch (error) {
+                console.error("No se pudieron cargar las incidencias:", error);
+                showToast(error.message || "No se pudieron cargar las incidencias.");
+            }
+        }
+
+        function readOptionalNumber(id, label, integer = false) {
+            const field = document.getElementById(id);
+            const value = field?.value.trim() || "";
+            if (!value) return null;
+            const number = Number(value);
+            if (!Number.isFinite(number) || number < 0 || (integer && !Number.isSafeInteger(number))) {
+                throw new Error(`${label} debe ser un número ${integer ? "entero " : ""}no negativo.`);
+            }
+            return number;
+        }
+
+        function collectDailyReportDetails() {
+            const callStats = {
+                callsMade: readOptionalNumber("dailyCallsMade", "Llamadas realizadas", true),
+                callsNotEffective: readOptionalNumber("dailyCallsNotEffective", "Llamadas no efectivas", true),
+                solventesNotLoaded: readOptionalNumber("dailySolventesNotLoaded", "Solventes no cargadas", true),
+                collectionTotal: readOptionalNumber("dailyCollectionTotal", "Total de cobranza")
+            };
+            const effectiveByZone = [...document.querySelectorAll("#dailyReportZones .zone-row")].flatMap(row => {
+                const zone = row.querySelector("[data-zone-name]")?.value.trim() || "";
+                const countValue = row.querySelector("[data-zone-count]")?.value.trim() || "";
+                if (!zone && !countValue) return [];
+                if (!zone || !countValue) throw new Error("Completa la zona y el número de llamadas efectivas.");
+                const count = Number(countValue);
+                if (!Number.isSafeInteger(count) || count < 0) throw new Error("Las llamadas efectivas deben ser un número entero no negativo.");
+                return [{ zone, count }];
+            });
+            const payments = [...document.querySelectorAll("#dailyReportPayments .payment-row")].flatMap(row => {
+                const razonSocial = row.querySelector("[data-payment-business]")?.value.trim() || "";
+                const cc = row.querySelector("[data-payment-cc]")?.value.trim() || "";
+                const amountValue = row.querySelector("[data-payment-amount]")?.value.trim() || "";
+                if (!razonSocial && !cc && !amountValue) return [];
+                if (!razonSocial || !amountValue) throw new Error("Cada pago expedito debe incluir la razón social y el monto.");
+                const amount = Number(amountValue);
+                if (!Number.isFinite(amount) || amount < 0) throw new Error("El monto de cada pago debe ser un número no negativo.");
+                return [{ razonSocial, cc, amount }];
+            });
+            const hasDetails = Object.values(callStats).some(value => value != null) ||
+                effectiveByZone.length > 0 || payments.length > 0;
+            return hasDetails ? { callStats, effectiveByZone, payments } : null;
+        }
+
+        async function saveDailyReport() {
+            const reportField = document.getElementById("dailyReportText");
+            const submitButton = document.querySelector("[data-action='save-daily-report']");
+            const content = reportField?.value.trim() || "";
+            let details;
+            try {
+                details = collectDailyReportDetails();
+            } catch (error) {
+                showToast(error.message);
+                return;
+            }
+            if (!content && !details) {
+                showToast("Completa alguna métrica, agrega pagos o escribe observaciones.");
+                reportField?.focus();
+                return;
+            }
+            if (content.length > 12000) {
+                showToast("El reporte supera el límite de 12000 caracteres.");
+                return;
+            }
+
+            if (submitButton) submitButton.disabled = true;
+            try {
+                const response = await apiFetch("/api/daily-reports", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ content, details })
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || "No se pudo guardar el reporte.");
+                }
+                appState.dailyReports.unshift(result.report);
+                refreshDailyReportViews();
+                reportField.value = "";
+                document.querySelectorAll("#dailyReportText, #dailyCallsMade, #dailyCallsNotEffective, #dailySolventesNotLoaded, #dailyCollectionTotal").forEach(field => {
+                    field.value = "";
+                });
+                document.querySelectorAll("#dailyReportZones input, #dailyReportPayments input").forEach(field => {
+                    field.value = "";
+                });
+                showToast("Reporte del día guardado correctamente.");
+            } catch (error) {
+                showToast(error.message || "No se pudo guardar el reporte.");
+            } finally {
+                if (submitButton) submitButton.disabled = false;
+            }
+        }
+
+        async function saveIncidence(form) {
+            const submitButton = form.querySelector("button[type='submit']");
+            const incidence = {
+                tipo: document.getElementById("incidenceType")?.value,
+                razonSocial: document.getElementById("incidenceBusiness")?.value.trim(),
+                cc: document.getElementById("incidenceCc")?.value.trim(),
+                municipio: document.getElementById("incidenceMunicipality")?.value.trim(),
+                monto: document.getElementById("incidenceAmount")?.value,
+                contactoNombre: document.getElementById("incidenceContactName")?.value.trim(),
+                contactoTelefono: document.getElementById("incidenceContactPhone")?.value.trim(),
+                descripcion: document.getElementById("incidenceDescription")?.value.trim()
+            };
+            if (submitButton) submitButton.disabled = true;
+            try {
+                const response = await apiFetch("/api/incidencias", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(incidence)
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success || !result.incidencia) {
+                    throw new Error(result.message || "No se pudo guardar la incidencia.");
+                }
+                appState.incidences.unshift(result.incidencia);
+                refreshIncidenceViews();
+                form.reset();
+                showToast("Incidencia guardada correctamente.");
+            } catch (error) {
+                showToast(error.message || "No se pudo guardar la incidencia.");
+            } finally {
+                if (submitButton) submitButton.disabled = false;
+            }
+        }
+
+        async function downloadDailyReports() {
+            await downloadFile("/api/daily-reports/excel");
+        }
+
+        async function downloadAllDailyReportsText() {
+            await downloadFile("/api/daily-reports/all/txt");
+        }
+
+        function downloadDailyReportFile(reportId) {
+            if (!reportId) return;
+            return downloadFile(`/api/daily-reports/${encodeURIComponent(reportId)}/file`);
+        }
+
+        function downloadUploadedReport(reportId) {
+            if (!reportId) return;
+            return downloadFile(`/api/reports/${encodeURIComponent(reportId)}/file`);
+        }
+
+        async function downloadFile(url) {
+            try {
+                const response = await apiFetch(url);
+                if (!response.ok) {
+                    let message = `No se pudo descargar el archivo (HTTP ${response.status}).`;
+                    try {
+                        const result = await response.json();
+                        if (typeof result.message === "string") message = result.message;
+                    } catch {
+                        // The server may return a non-JSON error page.
+                    }
+                    throw new Error(message);
+                }
+                const disposition = response.headers.get("Content-Disposition") || "";
+                const fileName = disposition.match(/filename="?([^";]+)"?/i)?.[1] || "reporte";
+                const objectUrl = URL.createObjectURL(await response.blob());
+                const link = document.createElement("a");
+                link.href = objectUrl;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            } catch (error) {
+                console.error("No se pudo descargar el archivo:", error);
+                showToast(error.message || "No se pudo descargar el archivo.");
+            }
+        }
+
+        async function deleteAdminRecord(kind, recordId, button) {
+            if (!recordId || appState.currentRole !== "admin") {
+                showToast("Solo un administrador puede eliminar registros.");
+                return;
+            }
+            const config = {
+                "daily-report": {
+                    endpoint: `/api/daily-reports/${encodeURIComponent(recordId)}`,
+                    confirmation: "¿Eliminar este reporte diario y su archivo TXT? Esta acción no se puede deshacer.",
+                    success: "Reporte diario eliminado.",
+                    update: () => {
+                        appState.dailyReports = appState.dailyReports.filter(report => report.id !== recordId);
+                        refreshDailyReportViews();
+                    }
+                },
+                "uploaded-report": {
+                    endpoint: `/api/reports/${encodeURIComponent(recordId)}`,
+                    confirmation: "¿Eliminar este reporte cargado y su archivo? Esta acción no se puede deshacer.",
+                    success: "Reporte y archivo eliminados.",
+                    update: () => {
+                        appState.reports = appState.reports.filter(report => report.id !== recordId);
+                        refreshReportViews();
+                    }
+                },
+                incidence: {
+                    endpoint: `/api/incidencias/${encodeURIComponent(recordId)}`,
+                    confirmation: "¿Eliminar esta incidencia? Esta acción no se puede deshacer.",
+                    success: "Incidencia eliminada.",
+                    update: () => {
+                        appState.incidences = appState.incidences.filter(incidence => incidence.id !== recordId);
+                        refreshIncidenceViews();
+                    }
+                }
+            }[kind];
+            if (!config || !window.confirm(config.confirmation)) return;
+
+            if (button) button.disabled = true;
+            try {
+                const response = await apiFetch(config.endpoint, { method: "DELETE" });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || "No se pudo eliminar el registro.");
+                }
+                config.update();
+                showToast(result.message || config.success);
+            } catch (error) {
+                showToast(error.message || "No se pudo eliminar el registro.");
+            } finally {
+                if (button) button.disabled = false;
+            }
+        }
+
         function refreshReportViews() {
             const operatorTable = document.getElementById("reportsTableBody");
             if (operatorTable) operatorTable.innerHTML = renderReportRows();
@@ -606,8 +1199,29 @@
             if (supervisorTable) supervisorTable.innerHTML = renderSupervisorReportRows();
             const historyTable = document.getElementById("managementHistoryBody");
             if (historyTable) historyTable.innerHTML = renderReportHistoryRows();
+            refreshOperatorFilterOptions();
             const count = document.getElementById("reportCount");
-            if (count) count.textContent = `Reportes guardados en el servidor: ${appState.reports.length}`;
+            if (count) count.textContent = `Reportes cargados para revisión: ${filterByOperator(appState.reports).length}`;
+        }
+
+        function refreshDailyReportViews() {
+            const table = document.getElementById("dailyReportsTableBody");
+            if (table) table.innerHTML = renderDailyReportRows();
+            const paymentsTable = document.getElementById("managementPaymentsBody");
+            if (paymentsTable) paymentsTable.innerHTML = renderPaymentRows();
+            refreshOperatorFilterOptions();
+        }
+
+        function refreshIncidenceViews() {
+            const operatorTable = document.getElementById("operatorIncidencesTableBody");
+            if (operatorTable) operatorTable.innerHTML = renderIncidenceRows();
+            const managementTable = document.getElementById("managementIncidencesTableBody");
+            if (managementTable) managementTable.innerHTML = renderIncidenceRows(true);
+            const claimsTable = document.getElementById("managementClaimsTableBody");
+            if (claimsTable) claimsTable.innerHTML = renderManagementIncidenceRows("RECLAMO", appState.currentRole === "admin");
+            const agreementsTable = document.getElementById("managementAgreementsTableBody");
+            if (agreementsTable) agreementsTable.innerHTML = renderManagementIncidenceRows("CONVENIO", appState.currentRole === "admin");
+            refreshOperatorFilterOptions();
         }
 
         // # AQUI SE ENVIA EL ARCHIVO SELECCIONADO AL ENDPOINT DEL SERVIDOR
@@ -633,7 +1247,7 @@
             if (uploadStatus) uploadStatus.textContent = "Subiendo archivo...";
 
             try {
-                const response = await fetch("/api/reports", { method: "POST", body: formData });
+                const response = await apiFetch("/api/reports", { method: "POST", body: formData });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
                     throw new Error(result.message || `HTTP ${response.status}`);
@@ -655,27 +1269,88 @@
             }
         }
 
-        // # AQUI SE ANADE UNA NOTIFICACION LOCAL Y SE ACTUALIZA EL INDICADOR DEL HEADER
-        function addNotification(title, text) {
-            appState.notifications.unshift({ title, text, createdAt: new Date() });
-            appState.notifications = appState.notifications.slice(0, 20);
+        function renderNotifications() {
             const list = document.getElementById("notificationList");
             const badge = document.getElementById("notificationBadge");
             if (list) {
                 list.replaceChildren();
+                if (!appState.notifications.length) {
+                    const empty = document.createElement("div");
+                    empty.className = "notif-item";
+                    empty.textContent = "No hay notificaciones guardadas.";
+                    list.appendChild(empty);
+                }
                 appState.notifications.forEach(notification => {
-                    const item = document.createElement("div");
-                    item.className = "notif-item unread";
+                    const canOpenChat = notification.action?.type === "private-chat" &&
+                        typeof notification.action.target === "string";
+                    const item = document.createElement(canOpenChat ? "button" : "div");
+                    item.className = `notif-item${notification.readAt ? "" : " unread"}${canOpenChat ? " notification-action" : ""}`;
+                    if (canOpenChat) {
+                        item.type = "button";
+                        item.dataset.action = "open-notification-chat";
+                        item.dataset.target = notification.action.target;
+                    }
                     const message = document.createElement("span");
                     message.textContent = `${notification.title}: ${notification.text}`;
                     const time = document.createElement("span");
                     time.className = "notif-time";
-                    time.textContent = notification.createdAt.toLocaleTimeString();
+                    time.textContent = new Date(notification.createdAt).toLocaleString();
                     item.append(message, time);
                     list.appendChild(item);
                 });
             }
-            if (badge) badge.textContent = String(appState.notifications.length);
+            const unreadCount = appState.notifications.filter(notification => !notification.readAt).length;
+            if (badge) {
+                badge.textContent = String(unreadCount);
+                badge.hidden = unreadCount === 0;
+            }
+        }
+
+        function addNotification(notification) {
+            if (!notification || typeof notification.id !== "string") return;
+            if (appState.notifications.some(item => item.id === notification.id)) return;
+            appState.notifications.unshift(notification);
+            renderNotifications();
+            showToast(`${notification.title}: ${notification.text}`);
+        }
+
+        async function loadNotifications() {
+            try {
+                const response = await apiFetch("/api/notifications");
+                const result = await response.json();
+                if (!response.ok || !result.success || !Array.isArray(result.notifications)) {
+                    throw new Error(result.message || `HTTP ${response.status}`);
+                }
+                const merged = new Map(result.notifications.map(item => [item.id, item]));
+                appState.notifications.forEach(item => merged.set(item.id, item));
+                appState.notifications = [...merged.values()]
+                    .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
+                renderNotifications();
+                if (document.getElementById("notifDropdown")?.classList.contains("is-open")) {
+                    markNotificationsRead();
+                }
+            } catch (error) {
+                console.error("No se pudieron cargar las notificaciones:", error);
+                showToast(error.message || "No se pudieron cargar las notificaciones.");
+            }
+        }
+
+        async function markNotificationsRead() {
+            if (!appState.notifications.some(notification => !notification.readAt)) return;
+            try {
+                const response = await apiFetch("/api/notifications/read", { method: "POST" });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || `HTTP ${response.status}`);
+                }
+                const readAt = new Date().toISOString();
+                appState.notifications = appState.notifications.map(notification =>
+                    notification.readAt ? notification : { ...notification, readAt }
+                );
+                renderNotifications();
+            } catch (error) {
+                showToast(error.message || "No se pudo marcar las notificaciones como leídas.");
+            }
         }
 
         // # AQUI SE MUESTRAN O SE OCULTAN LAS NOTIFICACIONES DEL SISTEMA
@@ -688,12 +1363,7 @@
             dropdown.setAttribute("aria-hidden", String(!shouldOpen));
             button.setAttribute("aria-expanded", String(shouldOpen));
             if (!shouldOpen && dropdown.contains(document.activeElement)) button.focus();
-            if (shouldOpen) {
-                appState.notifications = [];
-                const badge = document.getElementById("notificationBadge");
-                if (badge) badge.textContent = "0";
-                document.querySelectorAll(".notif-item.unread").forEach(item => item.classList.remove("unread"));
-            }
+            if (shouldOpen) markNotificationsRead();
         }
 
         // # AQUI SE RECIBE Y VALIDA LA SELECCION DE ARCHIVO
@@ -765,11 +1435,16 @@
                 return;
             }
             const destination = appState.activeChat;
-            socket.emit("chat:send", {
+            socket.timeout(10000).emit("chat:send", {
                 type: destination.type,
                 target: destination.type === "private" ? destination.target : "",
                 text: message
-            }, response => {
+            }, (error, response) => {
+                if (error) {
+                    console.error("No se recibió confirmación del mensaje:", error.message);
+                    showToast("El servidor no confirmó el guardado del mensaje.");
+                    return;
+                }
                 if (!response?.success) showToast(response?.message || "No se pudo enviar el mensaje.");
                 else input.value = "";
             });
@@ -784,15 +1459,24 @@
                 ? `private:${appState.activeChat.target}`
                 : "general";
 
-            ensureChatStore(key).push({ sender: data.sender, text: data.text, mine });
+            const chatMessage = {
+                id: data.id,
+                sender: data.sender,
+                text: data.text,
+                sentAt: data.sentAt,
+                mine
+            };
+            const conversation = ensureChatStore(key);
+            if (conversation.some(item => messageKey(item) === messageKey(chatMessage))) return;
+            conversation.push(chatMessage);
             if (key !== currentKey) {
                 if (isPrivate && !mine && appState.currentRole === "operador") {
                     appState.privateTarget = data.sender;
                     appState.activeChat = { type: "private", target: data.sender };
                     setRole(null, appState.currentRole);
+                    loadChatHistory(appState.activeChat);
                     return;
                 }
-                if (!mine) addNotification("Chat", `Nuevo mensaje de ${data.sender}.`);
                 return;
             }
             const container = document.getElementById("chatMessagesContainer");
@@ -826,7 +1510,11 @@
             const payload = destination === "general"
                 ? { type: "general", target: "", text, announcement: true }
                 : { type: "private", target: destination, text };
-            socket.emit("chat:send", payload, response => {
+            socket.timeout(10000).emit("chat:send", payload, (error, response) => {
+                if (error) {
+                    showToast("El servidor no confirmó el guardado del comunicado.");
+                    return;
+                }
                 if (!response?.success) {
                     showToast(response?.message || "No se pudo publicar el comunicado.");
                     return;
@@ -849,6 +1537,7 @@
             appState.selectedFile = null;
             appState.onlineUsers = [];
             appState.reports = [];
+            appState.dailyReports = [];
             appState.messages = { general: [] };
             appState.notifications = [];
             appState.activeCategory = "cobranza";
@@ -861,10 +1550,7 @@
             const headerName = document.getElementById("userName");
             const loginError = document.getElementById("loginError");
             if (!overlay || !header || !navigation || !main || !headerName) return;
-            const notificationList = document.getElementById("notificationList");
-            const notificationBadge = document.getElementById("notificationBadge");
-            if (notificationList) notificationList.innerHTML = '<div class="notif-item"><span>No hay notificaciones nuevas.</span></div>';
-            if (notificationBadge) notificationBadge.textContent = "0";
+            renderNotifications();
             overlay.hidden = true;
             header.hidden = false;
             navigation.hidden = false;
@@ -890,7 +1576,7 @@
             if (submitButton) submitButton.disabled = true;
             if (loginError) loginError.textContent = "";
             try {
-                const response = await fetch("/api/auth/login", {
+                const response = await apiFetch("/api/auth/login", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ username, password: passwordField.value })
@@ -902,6 +1588,7 @@
             } catch (error) {
                 if (loginError) loginError.textContent = error.message || "No se pudo conectar con el servidor.";
                 else showToast(error.message || "No se pudo conectar con el servidor.");
+
             } finally {
                 if (submitButton) submitButton.disabled = false;
             }
@@ -910,7 +1597,7 @@
         // # AQUI SE RESTAURA UNA SESION EXISTENTE O SE MANTIENE EL LOGIN VISIBLE
         async function restoreSession() {
             try {
-                const response = await fetch("/api/auth/me");
+                const response = await apiFetch("/api/auth/me");
                 if (!response.ok) return;
                 const result = await response.json();
                 if (result.success) activateSession(result.user);
@@ -929,7 +1616,7 @@
             if (!overlay || !header || !navigation || !main) return;
             if (socket?.connected) socket.disconnect();
             try {
-                await fetch("/api/auth/logout", { method: "POST" });
+                await apiFetch("/api/auth/logout", { method: "POST" });
             } catch (error) {
                 console.error("No se pudo completar el cierre de sesión:", error);
             }
@@ -939,6 +1626,7 @@
             appState.selectedFile = null;
             appState.onlineUsers = [];
             appState.reports = [];
+            appState.dailyReports = [];
             appState.messages = { general: [] };
             appState.notifications = [];
             appState.privateTarget = "";
@@ -946,10 +1634,7 @@
             navigation.hidden = true;
             main.hidden = true;
             overlay.hidden = false;
-            const notificationList = document.getElementById("notificationList");
-            const notificationBadge = document.getElementById("notificationBadge");
-            if (notificationList) notificationList.innerHTML = '<div class="notif-item"><span>No hay notificaciones nuevas.</span></div>';
-            if (notificationBadge) notificationBadge.textContent = "0";
+            renderNotifications();
             const passwordField = document.getElementById("loginPass");
             if (passwordField) passwordField.value = "";
             if (userField) userField.focus();
@@ -963,7 +1648,7 @@
             const role = form.querySelector("#newUserRole")?.value;
             if (!username || !password || !role) return;
             try {
-                const response = await fetch("/api/users", {
+                const response = await apiFetch("/api/users", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ username, password, role })
@@ -1010,8 +1695,41 @@
                 if (actionButton) {
                     const action = actionButton.dataset.action;
                     if (action === "logout") cerrarSesion();
+                    else if (action === "add-report-zone") {
+                        document.getElementById("dailyReportZones")?.insertAdjacentHTML("beforeend", `
+                            <div class="form-row report-detail-row zone-row">
+                                <input class="form-control grow" type="text" maxlength="80" data-zone-name placeholder="Zona">
+                                <input class="form-control" type="number" min="0" step="1" data-zone-count placeholder="Llamadas" aria-label="Llamadas efectivas">
+                                <button class="secondary-btn" type="button" data-action="remove-report-row" aria-label="Quitar zona">Quitar</button>
+                            </div>`);
+                    } else if (action === "add-report-payment") {
+                        document.getElementById("dailyReportPayments")?.insertAdjacentHTML("beforeend", `
+                            <div class="form-row report-detail-row payment-row">
+                                <input class="form-control grow" type="text" maxlength="160" data-payment-business placeholder="Razón social">
+                                <input class="form-control" style="width:110px" type="text" maxlength="50" data-payment-cc placeholder="CC">
+                                <input class="form-control" style="width:140px" type="number" min="0" step="0.01" data-payment-amount placeholder="Monto" aria-label="Monto del pago">
+                                <button class="secondary-btn" type="button" data-action="remove-report-row" aria-label="Quitar pago">Quitar</button>
+                            </div>`);
+                    } else if (action === "remove-report-row") actionButton.closest(".report-detail-row")?.remove();
                     else if (action === "close-notifications") toggleNotifications(false);
                     else if (action === "close-modal") closeModal(actionButton.dataset.modal);
+                    else if (action === "open-notification-chat") {
+                        const targetUsername = actionButton.dataset.target;
+                        if (!targetUsername) return;
+                        appState.privateTarget = targetUsername;
+                        appState.activeChat = { type: "private", target: targetUsername };
+                        appState.activeCategory = "cobranza";
+                        toggleNotifications(false);
+                        setRole(null, appState.currentRole);
+                        loadChatHistory(appState.activeChat);
+                    } else if (action === "save-daily-report") saveDailyReport();
+                    else if (action === "download-daily-reports") downloadDailyReports();
+                    else if (action === "download-daily-reports-txt") downloadAllDailyReportsText();
+                    else if (action === "download-daily-report-file") downloadDailyReportFile(actionButton.dataset.id);
+                    else if (action === "download-uploaded-report") downloadUploadedReport(actionButton.dataset.id);
+                    else if (action === "delete-daily-report") deleteAdminRecord("daily-report", actionButton.dataset.id, actionButton);
+                    else if (action === "delete-uploaded-report") deleteAdminRecord("uploaded-report", actionButton.dataset.id, actionButton);
+                    else if (action === "delete-incidence") deleteAdminRecord("incidence", actionButton.dataset.id, actionButton);
                     else if (action === "choose-file") document.getElementById("reportFileInput")?.click();
                     else if (action === "upload-report") {
                         if (!appState.selectedFile) document.getElementById("reportFileInput")?.click();
@@ -1030,6 +1748,7 @@
                         if (!appState.privateTarget) return;
                         appState.activeChat = { type: "private", target: appState.privateTarget };
                         setRole(null, appState.currentRole);
+                        loadChatHistory(appState.activeChat);
                     } else if (action === "switch-chat") {
                         const privateTarget = actionButton.dataset.target || appState.privateTarget;
                         if (actionButton.dataset.chat === "private" && !privateTarget) return;
@@ -1038,6 +1757,7 @@
                             ? { type: "private", target: privateTarget }
                             : { type: "general", target: "" };
                         setRole(null, appState.currentRole);
+                        loadChatHistory(appState.activeChat);
                     } else if (action === "demo-export") showToast("La exportación debe conectarse a un generador de archivos.");
                     return;
                 }
@@ -1070,12 +1790,20 @@
                 } else if (form.dataset.form === "user-create") {
                     event.preventDefault();
                     createUser(form);
+                } else if (form.dataset.form === "incidence") {
+                    event.preventDefault();
+                    saveIncidence(form);
                 }
             });
 
             document.addEventListener("change", event => {
                 if (event.target instanceof HTMLInputElement && event.target.id === "reportFileInput") {
                     handleReportFile(event.target.files?.[0]);
+                } else if (event.target instanceof HTMLSelectElement && event.target.id === "operatorFilterSelect") {
+                    appState.operatorFilter = event.target.value;
+                    refreshReportViews();
+                    refreshDailyReportViews();
+                    refreshIncidenceViews();
                 }
             });
             document.addEventListener("dragover", event => {
@@ -1107,6 +1835,10 @@
                 const chatStatus = document.getElementById("chatConnectionStatus");
                 if (chatStatus) chatStatus.textContent = "● En línea";
                 loadReports();
+                loadDailyReports();
+                loadIncidences();
+                loadNotifications();
+                loadChatHistory();
             });
             socket.on("disconnect", () => {
                 if (connection) connection.textContent = "Desconectado";
@@ -1127,13 +1859,20 @@
                         badge.className = `badge-status ${statusClasses[data.status] || "badge-danger"}`;
                     }
                 }
+                if (typeof data?.username === "string" && Object.prototype.hasOwnProperty.call(statusClasses, data.status)) {
+                    const operator = appState.onlineUsers.find(user =>
+                        normalizeOperatorName(user.username) === normalizeOperatorName(data.username)
+                    );
+                    if (operator) operator.status = data.status;
+                    const operatorCards = document.getElementById("callCenterOperators");
+                    if (operatorCards) operatorCards.innerHTML = renderOperatorCards();
+                }
             });
             socket.on("chat:message", appendChatMessage);
             socket.on("report:new", report => {
                 if (!report || typeof report.originalName !== "string") return;
                 if (!appState.reports.some(item => item.id === report.id)) appState.reports.unshift(report);
                 refreshReportViews();
-                addNotification("Reporte nuevo", `${report.operator} cargó ${report.originalName}.`);
             });
             socket.on("reports:snapshot", reports => {
                 if (!Array.isArray(reports)) return;
@@ -1145,21 +1884,33 @@
                 const index = appState.reports.findIndex(item => item.id === report.id);
                 if (index >= 0) appState.reports[index] = report;
                 refreshReportViews();
-                if (appState.currentRole !== "operador") {
-                    addNotification("Reporte revisado", `El reporte de ${report.operator} fue ${report.status.toLowerCase()}.`);
-                }
             });
-            socket.on("announcement:new", data => {
-                if (!data || typeof data.text !== "string") return;
-                addNotification("Comunicado", data.text);
+            socket.on("report:deleted", data => {
+                if (!data || typeof data.id !== "string") return;
+                appState.reports = appState.reports.filter(report => report.id !== data.id);
+                refreshReportViews();
             });
+            socket.on("notification:new", addNotification);
         }
 
         // # AQUI SE INICIA LA APLICACION DESPUES DE CARGAR EL DOCUMENTO
         window.addEventListener("load", () => {
             bindInterfaceEvents();
-            bindSocketEvents();
             restoreSession();
+            window.EVIDENCIA_SOCKET_IO_READY.then(() => {
+                if (typeof window.io !== "function") {
+                    throw new Error("El cliente de Socket.IO no está disponible.");
+                }
+                socket = window.io(API_BASE_URL || undefined, {
+                    autoConnect: false,
+                    withCredentials: true
+                });
+                bindSocketEvents();
+                if (appState.userName) socket.connect();
+            }).catch(error => {
+                console.error("No se pudo cargar Socket.IO:", error);
+                bindSocketEvents();
+            });
         }, { once: true });
     </script>
 </body>

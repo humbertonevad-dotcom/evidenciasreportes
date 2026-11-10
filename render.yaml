@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 services:
   - type: web
     name: evidencia-reportes-humbertonevado89
@@ -23,3 +24,30 @@ services:
         value: Admin
       - key: INITIAL_ADMIN_PASSWORD
         sync: false
+=======
+services:
+  - type: web
+    name: evidencia-reportes-humbertonevado89
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    disk:
+      name: evidencia-reportes-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATA_DIRECTORY
+        value: /var/data
+      - key: FRONTEND_ORIGINS
+        value: https://humbertonevad-dotcom.github.io,https://evidencia-reportes-humbertonevado89.onrender.com
+      - key: INITIAL_ADMIN_USERNAME
+        value: Admin
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false
+>>>>>>> 39b182a9cd641112cfc5e05bb2851c89f50fac53

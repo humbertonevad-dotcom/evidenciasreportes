@@ -19,6 +19,19 @@ En el teléfono u otra PC de la misma red, abre `http://<IPv4-de-esta-PC>:3000`;
 
 No expongas este servidor a Internet ni a redes no confiables. Antes de habilitar acceso de red, cambia las contraseñas de demostración y usa el portal únicamente en una red privada confiable.
 
+## Publicación con Render y GitHub Pages
+
+El portal necesita Node.js, API, Socket.IO y almacenamiento persistente; GitHub Pages por sí solo no puede ejecutar estas funciones. `render.yaml` define un servicio Render con disco persistente para usuarios, reportes, incidencias, mensajes y archivos. El disco persistente de Render requiere un plan de pago y el servicio debe mantenerse en una sola instancia porque la sesión y Socket.IO viven en memoria.
+
+1. Conecta en Render el repositorio de este proyecto y crea el servicio desde su Blueprint (`render.yaml`).
+2. Al crear el Blueprint, define `INITIAL_ADMIN_PASSWORD` con una contraseña segura de al menos 12 caracteres. El usuario inicial es `Admin`; al iniciar, crea las demás cuentas desde el portal.
+3. La URL pública prevista del servicio es `https://evidencia-reportes-humbertonevado89.onrender.com`. Si Render asigna otra URL, actualiza `api-config.js` y la lista `FRONTEND_ORIGINS` del servicio con el origen real.
+4. Publica `index.html` y `api-config.js` en el repositorio que sirve GitHub Pages para que el enlace del portal use el backend de Render. En este workspace, el remoto es `humbertonevado89-sys/evidenciasdata.venez.`, mientras que el enlace Pages pertenece a `humbertonevad-dotcom/evidenciasreportes`; publicar este repositorio no actualiza automáticamente ese sitio.
+
+La interfaz de GitHub Pages y la API de Render tienen orígenes distintos. El backend usa CORS restringido y cookies seguras entre sitios. Si el navegador bloquea cookies de terceros, el inicio de sesión desde GitHub Pages puede no conservarse; para compatibilidad máxima, publica también la interfaz en Render para que frontend y API compartan origen.
+
+Los archivos JSON de usuarios, reportes e incidencias son datos locales y no deben publicarse. En Render se guardan bajo el disco `/var/data`; la cuenta inicial de producción se genera allí con la contraseña configurada como secreto.
+
 ## Estructura
 
 ```text

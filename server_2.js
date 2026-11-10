@@ -18,23 +18,32 @@ const { Server } = require("socket.io");
 const { readJsonFile, saveJsonFile } = require("./src/storage/jsonFile");
 const { createDailyReportsWorkbook } = require("./src/reports/dailyWorkbook");
 
+const dataDirectory = process.env.DATA_DIRECTORY || __dirname;
+const allowedFrontendOrigins = new Set(
+    (process.env.FRONTEND_ORIGINS || process.env.FRONTEND_ORIGIN || "")
+        .split(",")
+        .map(origin => origin.trim().replace(/\/+$/, ""))
+        .filter(Boolean)
+);
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, allowedFrontendOrigins.size
+    ? { cors: { origin: [...allowedFrontendOrigins], credentials: true } }
+    : {});
 const scryptAsync = promisify(scrypt);
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_DAILY_REPORT_LENGTH = 12000;
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
-const uploadDirectory = path.join(__dirname, "uploads");
-const usersFilePath = path.join(__dirname, "users.json");
-const reportsFilePath = path.join(__dirname, "reports.json");
-const messagesFilePath = path.join(__dirname, "messages.json");
-const dailyReportsFilePath = path.join(__dirname, "daily_reports.json");
-const dailyReportFilesDirectory = path.join(__dirname, "daily_reports_files");
-const incidencesFilePath = path.join(__dirname, "incidencias.json");
-const notificationsFilePath = path.join(__dirname, "notifications.json");
+const uploadDirectory = path.join(dataDirectory, "uploads");
+const usersFilePath = path.join(dataDirectory, "users.json");
+const reportsFilePath = path.join(dataDirectory, "reports.json");
+const messagesFilePath = path.join(dataDirectory, "messages.json");
+const dailyReportsFilePath = path.join(dataDirectory, "daily_reports.json");
+const dailyReportFilesDirectory = path.join(dataDirectory, "daily_reports_files");
+const incidencesFilePath = path.join(dataDirectory, "incidencias.json");
+const notificationsFilePath = path.join(dataDirectory, "notifications.json");
 const activeSockets = new Map();
 const sessions = new Map();
 const loginFailures = new Map();
@@ -44,6 +53,7 @@ const allowedExtensions = new Set([".csv", ".xls", ".xlsx"]);
 const cookieName = "evidencia_session";
 const dummyPasswordSalt = randomBytes(16).toString("hex");
 
+fs.mkdirSync(dataDirectory, { recursive: true });
 fs.mkdirSync(uploadDirectory, { recursive: true });
 
 function normalizeUsername(username) {
@@ -106,10 +116,28 @@ function loadUsers() {
         return users;
     }
 
+    if (process.env.NODE_ENV === "production") {
+        const username = process.env.INITIAL_ADMIN_USERNAME?.trim().normalize("NFKC") || "";
+        const password = process.env.INITIAL_ADMIN_PASSWORD || "";
+        if (!username || username.length > 80 || password.length < 12 || password.length > 128) {
+            throw new Error("Configura INITIAL_ADMIN_USERNAME y una INITIAL_ADMIN_PASSWORD de 12 a 128 caracteres.");
+        }
+        const salt = randomBytes(16).toString("hex");
+        const initialAdmin = {
+            username,
+            role: "admin",
+            salt,
+            passwordHash: hashPassword(password, salt)
+        };
+        saveUsers([initialAdmin]);
+        console.warn("Se creó la cuenta administrativa inicial en el almacenamiento persistente.");
+        return [initialAdmin];
+    }
+
     const defaults = [
         { username: "Humberto Nevado", role: "operador" },
-        { username: "Alejandro Supervisor", role: "supervisor" },
-        { username: "Directiva Admin", role: "admin" }
+        { username: "Supervisor", role: "supervisor" },
+        { username: "Admin", role: "admin" }
     ].map(user => {
         const salt = randomBytes(16).toString("hex");
         return { ...user, salt, passwordHash: hashPassword("123", salt) };
@@ -477,13 +505,14 @@ function requireRole(...roles) {
 }
 
 function cookieOptions(maxAge) {
+    const sameSite = allowedFrontendOrigins.size ? "None" : "Lax";
     return [
         `${cookieName}=`,
         "Path=/",
         "HttpOnly",
-        "SameSite=Lax",
+        `SameSite=${sameSite}`,
         `Max-Age=${maxAge}`,
-        ...(process.env.NODE_ENV === "production" ? ["Secure"] : [])
+        ...(process.env.NODE_ENV === "production" || sameSite === "None" ? ["Secure"] : [])
     ];
 }
 
@@ -582,13 +611,38 @@ function clearLoginFailures(key) {
 
 // # AQUI SE LIMITAN LAS PETICIONES Y SE SIRVE SOLO LA INTERFAZ PUBLICA
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "64kb" }));
 app.use((request, response, next) => {
     response.setHeader("Cache-Control", "no-store");
+    const origin = request.get("Origin");
+    const requestOrigin = `${request.protocol}://${request.get("host")}`;
+    if (origin && !allowedFrontendOrigins.has(origin) && origin !== requestOrigin) {
+        response.status(403).json({ success: false, message: "Origen no autorizado." });
+        return;
+    }
+    if (origin && allowedFrontendOrigins.has(origin)) {
+        response.setHeader("Access-Control-Allow-Origin", origin);
+        response.setHeader("Access-Control-Allow-Credentials", "true");
+        response.setHeader("Vary", "Origin");
+        if (request.method === "OPTIONS") {
+            response.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+            response.setHeader(
+                "Access-Control-Allow-Headers",
+                request.get("Access-Control-Request-Headers") || "Content-Type"
+            );
+            response.status(204).end();
+            return;
+        }
+    } else if (request.method === "OPTIONS") {
+        response.status(403).end();
+        return;
+    }
     next();
 });
 
 app.get("/", (request, response) => response.sendFile(path.join(__dirname, "index.html")));
+app.get("/api-config.js", (request, response) => response.sendFile(path.join(__dirname, "api-config.js")));
 app.get("/api/health", (request, response) => response.json({ success: true, status: "ok" }));
 
 // # AQUI SE AUTENTICAN USUARIOS CON HASH SCRYPT Y SE CREA UNA SESION HTTPONLY
@@ -1358,5 +1412,7 @@ server.listen(PORT, HOST, () => {
     if (HOST === "0.0.0.0") {
         console.log("El servidor acepta conexiones de la red local; usa la IPv4 de esta PC desde otros dispositivos.");
     }
-    console.log("Cuentas de prueba iniciales: Humberto Nevado / 123, Alejandro Supervisor / 123 y Directiva Admin / 123");
+    if (process.env.NODE_ENV !== "production") {
+        console.log("Cuentas de prueba iniciales: Humberto / 123, Supervisor / 123 y Admin / 123");
+    }
 });

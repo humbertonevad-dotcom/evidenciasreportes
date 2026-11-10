@@ -226,9 +226,26 @@
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
     <!-- # PARTE 4 Y 5: LOGICA DE ROLES, API, WEBSOCKETS, CHAT, SUBIDAS Y EVENTOS -->
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="./api-config.js"></script>
+    <script>
+        window.EVIDENCIA_API_URL = typeof window.EVIDENCIA_API_URL === "string"
+            ? window.EVIDENCIA_API_URL.trim().replace(/\/+$/, "")
+            : "";
+        window.EVIDENCIA_SOCKET_IO_READY = new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = `${window.EVIDENCIA_API_URL}/socket.io/socket.io.js`;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error("No se pudo cargar el cliente de Socket.IO."));
+            document.head.appendChild(script);
+        });
+    </script>
     <script>
         "use strict";
+
+        const API_BASE_URL = window.EVIDENCIA_API_URL;
+        function apiFetch(url, options = {}) {
+            return fetch(`${API_BASE_URL}${url}`, { ...options, credentials: "include" });
+        }
 
         // # AQUI SE MANTIENE EL ESTADO DE LA INTERFAZ, NO EL DE AUTENTICACION DEL SERVIDOR
         const appState = {
@@ -251,7 +268,7 @@
 
         const roleNames = { operador: "Operador", supervisor: "Supervisor de Área", admin: "Administrador Global" };
         const statusClasses = { Activo: "badge-success", "En Receso": "badge-warning", Desactivo: "badge-danger" };
-        const socket = typeof window.io === "function" ? window.io({ autoConnect: false }) : null;
+        let socket = null;
         let toastTimer = 0;
 
         // # AQUI SE CODIFICA TEXTO DINAMICO ANTES DE USARLO EN PLANTILLAS HTML
@@ -909,7 +926,7 @@
         // # AQUI SE CARGA EL HISTORIAL DE REPORTES DISPONIBLE EN EL BACKEND
         async function loadReports() {
             try {
-                const response = await fetch("/api/reports");
+                const response = await apiFetch("/api/reports");
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 if (!Array.isArray(data.reports)) throw new Error("Respuesta de reportes inválida.");
@@ -923,7 +940,7 @@
 
         async function loadDailyReports() {
             try {
-                const response = await fetch("/api/daily-reports");
+                const response = await apiFetch("/api/daily-reports");
                 const result = await response.json();
                 if (!response.ok || !result.success || !Array.isArray(result.reports)) {
                     throw new Error(result.message || `HTTP ${response.status}`);
@@ -938,7 +955,7 @@
 
         async function loadIncidences() {
             try {
-                const response = await fetch("/api/incidencias");
+                const response = await apiFetch("/api/incidencias");
                 const result = await response.json();
                 if (!response.ok || !result.success || !Array.isArray(result.incidencias)) {
                     throw new Error(result.message || `HTTP ${response.status}`);
@@ -1016,7 +1033,7 @@
 
             if (submitButton) submitButton.disabled = true;
             try {
-                const response = await fetch("/api/daily-reports", {
+                const response = await apiFetch("/api/daily-reports", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ content, details })
@@ -1056,7 +1073,7 @@
             };
             if (submitButton) submitButton.disabled = true;
             try {
-                const response = await fetch("/api/incidencias", {
+                const response = await apiFetch("/api/incidencias", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(incidence)
@@ -1096,7 +1113,7 @@
 
         async function downloadFile(url) {
             try {
-                const response = await fetch(url);
+                const response = await apiFetch(url);
                 if (!response.ok) {
                     let message = `No se pudo descargar el archivo (HTTP ${response.status}).`;
                     try {
@@ -1161,7 +1178,7 @@
 
             if (button) button.disabled = true;
             try {
-                const response = await fetch(config.endpoint, { method: "DELETE" });
+                const response = await apiFetch(config.endpoint, { method: "DELETE" });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
                     throw new Error(result.message || "No se pudo eliminar el registro.");
@@ -1230,7 +1247,7 @@
             if (uploadStatus) uploadStatus.textContent = "Subiendo archivo...";
 
             try {
-                const response = await fetch("/api/reports", { method: "POST", body: formData });
+                const response = await apiFetch("/api/reports", { method: "POST", body: formData });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
                     throw new Error(result.message || `HTTP ${response.status}`);
@@ -1299,7 +1316,7 @@
 
         async function loadNotifications() {
             try {
-                const response = await fetch("/api/notifications");
+                const response = await apiFetch("/api/notifications");
                 const result = await response.json();
                 if (!response.ok || !result.success || !Array.isArray(result.notifications)) {
                     throw new Error(result.message || `HTTP ${response.status}`);
@@ -1321,7 +1338,7 @@
         async function markNotificationsRead() {
             if (!appState.notifications.some(notification => !notification.readAt)) return;
             try {
-                const response = await fetch("/api/notifications/read", { method: "POST" });
+                const response = await apiFetch("/api/notifications/read", { method: "POST" });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
                     throw new Error(result.message || `HTTP ${response.status}`);
@@ -1559,7 +1576,7 @@
             if (submitButton) submitButton.disabled = true;
             if (loginError) loginError.textContent = "";
             try {
-                const response = await fetch("/api/auth/login", {
+                const response = await apiFetch("/api/auth/login", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ username, password: passwordField.value })
@@ -1580,7 +1597,7 @@
         // # AQUI SE RESTAURA UNA SESION EXISTENTE O SE MANTIENE EL LOGIN VISIBLE
         async function restoreSession() {
             try {
-                const response = await fetch("/api/auth/me");
+                const response = await apiFetch("/api/auth/me");
                 if (!response.ok) return;
                 const result = await response.json();
                 if (result.success) activateSession(result.user);
@@ -1599,7 +1616,7 @@
             if (!overlay || !header || !navigation || !main) return;
             if (socket?.connected) socket.disconnect();
             try {
-                await fetch("/api/auth/logout", { method: "POST" });
+                await apiFetch("/api/auth/logout", { method: "POST" });
             } catch (error) {
                 console.error("No se pudo completar el cierre de sesión:", error);
             }
@@ -1631,7 +1648,7 @@
             const role = form.querySelector("#newUserRole")?.value;
             if (!username || !password || !role) return;
             try {
-                const response = await fetch("/api/users", {
+                const response = await apiFetch("/api/users", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ username, password, role })
@@ -1879,8 +1896,21 @@
         // # AQUI SE INICIA LA APLICACION DESPUES DE CARGAR EL DOCUMENTO
         window.addEventListener("load", () => {
             bindInterfaceEvents();
-            bindSocketEvents();
             restoreSession();
+            window.EVIDENCIA_SOCKET_IO_READY.then(() => {
+                if (typeof window.io !== "function") {
+                    throw new Error("El cliente de Socket.IO no está disponible.");
+                }
+                socket = window.io(API_BASE_URL || undefined, {
+                    autoConnect: false,
+                    withCredentials: true
+                });
+                bindSocketEvents();
+                if (appState.userName) socket.connect();
+            }).catch(error => {
+                console.error("No se pudo cargar Socket.IO:", error);
+                bindSocketEvents();
+            });
         }, { once: true });
     </script>
 </body>
